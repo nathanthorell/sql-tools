@@ -1,0 +1,20 @@
+# Python virtual environment
+.env
+.venv
+env/
+venv/
+
+# Cache directories
+__pycache__/
+.mypy_cache/
+.ruff_cache/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+*.spec
+
+# Misc
+.DS_Store
+.vscode
