@@ -1,0 +1,3 @@
+[view_tester]
+schema = "report"
+logging_level = "errors_only" # "verbose" or "errors_only" or "summary"
