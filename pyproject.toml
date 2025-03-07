@@ -5,7 +5,15 @@ description = "Various tools for use in MS SQL Server"
 license = { file = "LICENSE" }
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = ["pyodbc", "python-dotenv", "prettytable", "toml", "sqlalchemy"]
+dependencies = [
+    "pyodbc",
+    "python-dotenv",
+    "prettytable",
+    "toml",
+    "sqlalchemy",
+    "pandas",
+    "pyarrow",
+]
 
 [project.optional-dependencies]
 dev = ["ruff", "mypy"]
@@ -14,13 +22,14 @@ dev = ["ruff", "mypy"]
 obj_compare = "obj_compare.obj_compare:main"
 usp_tester = "usp_tester.usp_tester:main"
 view_tester = "view_tester.view_tester:main"
+sql_to_parquet = "sql_to_parquet.sql_to_parquet:main"
 
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-package-dir = {"" = "./src"}
+package-dir = { "" = "./src" }
 
 [tool.ruff]
 target-version = "py313"

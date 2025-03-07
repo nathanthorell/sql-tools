@@ -1,0 +1,29 @@
+[sql_to_parquet]
+data_dir = "./data/"
+batch_size = 10000
+logging_level = "summary" # "summary", "verbose", "debug", "errors_only"
+
+# List of objects to export
+# Each object has:
+#   - name: Friendly name for the output file (without .parquet extension)
+#   - object: SQL object name in format "schema.object" or just "object" (defaults to dbo)
+#   - filter: Optional SQL WHERE clause to filter data
+[[sql_to_parquet.objects]]
+name = "customers"
+object = "dbo.Customers"
+filter = "IsActive = 1"
+
+[[sql_to_parquet.objects]]
+name = "orders"
+object = "sales.vw_OrderDetails"
+filter = "OrderDate >= '2023-01-01'"
+
+[[sql_to_parquet.objects]]
+name = "products"
+object = "inventory.Products"
+
+# Example with default dbo schema (will use dbo.Employees)
+[[sql_to_parquet.objects]]
+name = "employees"
+object = "Employees"
+filter = "Department = 'Engineering'"

@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from typing import Optional
 
 import pyodbc
+from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
 
 
 @dataclass
@@ -41,6 +43,22 @@ class Connection:
     def connect(self) -> pyodbc.Connection:
         """Create and return a database connection."""
         return pyodbc.connect(self.full_connection_string)
+
+    def get_sqlalchemy_engine(self) -> Engine:
+        """
+        Get a SQLAlchemy engine for this connection.
+
+        This creates a SQLAlchemy engine that can be used with pandas
+        and other libraries that work with SQLAlchemy.
+
+        Returns:
+            SQLAlchemy engine instance
+        """
+        # Create SQLAlchemy engine using the pyodbc driver
+        # The connection string needs to be in SQLAlchemy format
+        odbc_connect = self.full_connection_string
+        engine = create_engine(f"mssql+pyodbc:///?odbc_connect={odbc_connect}")
+        return engine
 
     def __str__(self) -> str:
         return f"Connection to [{self.server}] database: [{self.database}]"
