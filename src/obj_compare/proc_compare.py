@@ -27,38 +27,6 @@ def fetch_stored_procs(conn: pyodbc.Connection, schema_name: str) -> Dict[str, s
         cursor.close()
 
 
-def compare_procs_for_exclusivity(connections: Dict[str, Connection], schema_name: str) -> None:
-    proc_data = {}
-
-    # Fetch stored procedure names from each server
-    for env, connection in connections.items():
-        conn = connection.connect()
-        proc_data[env] = fetch_stored_procs(conn, schema_name)
-
-    proc_names = {env: set(procs.keys()) for env, procs in proc_data.items()}
-
-    # Prepare a table for exclusive procedures
-    table = PrettyTable()
-    table.field_names = ["Server", "Exclusive Procedures"]
-    table.align["Server"] = "l"
-    table.align["Exclusive Procedures"] = "l"
-    table.max_width["Exclusive Procedures"] = 60
-
-    for server, names in proc_names.items():
-        # Get procedures unique to this server
-        other_servers = [proc_names[s] for s in proc_names if s != server]
-        others_union = set.union(*other_servers)
-        exclusive = names - others_union
-
-        if exclusive:
-            table.add_row([server, "\n".join(sorted(exclusive))])
-        else:
-            table.add_row([server, "None"])
-
-    print(f"\nExclusive Stored Procedures in Schema '{schema_name}':\n")
-    print(table)
-
-
 def compare_proc_definitions(connections: Dict[str, Connection], schema_name: str) -> None:
     """
     Compare procedure definitions across all environments using checksums.
@@ -75,7 +43,7 @@ def compare_proc_definitions(connections: Dict[str, Connection], schema_name: st
 
         # Calculate checksums
         proc_checksums[env] = {
-            proc_name: hashlib.md5(" ".join(definition.split()).encode("utf-8")).hexdigest()
+            proc_name: hashlib.md5(" ".join(definition.split()).encode("utf-8")).hexdigest()[-10:]
             for proc_name, definition in procs.items()
         }
 
@@ -89,16 +57,11 @@ def compare_proc_definitions(connections: Dict[str, Connection], schema_name: st
 
     has_differences = False
     for proc_name in sorted(all_proc_names):
-        # Skip procedures that only exist in one environment
-        env_count = sum(1 for env in proc_checksums if proc_name in proc_checksums[env])
-        if env_count <= 1:
-            continue
-
         # Get checksums for all environments
         checksums = [proc_checksums[env].get(proc_name, "N/A") for env in connections.keys()]
 
-        # Check if there are differences, ignore N/A
-        valid_checksums = [cs for cs in checksums if cs != "N/A"]
+        # Check if there are differences
+        valid_checksums = [cs for cs in checksums]
         if len(set(valid_checksums)) > 1:
             has_differences = True
             checksum_table.add_row([proc_name] + checksums)

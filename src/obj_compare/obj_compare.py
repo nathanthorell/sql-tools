@@ -4,8 +4,8 @@ from typing import Dict
 import toml
 from dotenv import load_dotenv
 
-from obj_compare.proc_compare import compare_proc_definitions, compare_procs_for_exclusivity
-from obj_compare.view_compare import compare_view_definitions, compare_views_for_exclusivity
+from obj_compare.proc_compare import compare_proc_definitions
+from obj_compare.view_compare import compare_view_definitions
 from utils.utils import Connection, get_connection
 
 
@@ -26,8 +26,6 @@ def main() -> None:
         obj_compare_config = config["sql_object_compare"]
         schema: str = obj_compare_config["schema"]
 
-    compare_procs_for_exclusivity(connections, schema)
-    compare_views_for_exclusivity(connections, schema)
     compare_proc_definitions(connections, schema)
     compare_view_definitions(connections, schema)
 
