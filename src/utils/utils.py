@@ -70,3 +70,18 @@ def get_connection(env_var_name: str) -> Connection:
     if not conn_str:
         raise ValueError(f"Environment variable '{env_var_name}' not found or empty")
     return Connection(connection_string=conn_str)
+
+
+def modify_connection_for_database(connection: Connection, database_name: str) -> Connection:
+    """
+    Creates a new Connection object with the specified database name.
+    """
+    # Create a copy of the connection string with the new database name
+    connection_string = re.sub(
+        r"Database=[^;]+", f"Database={database_name}", connection.connection_string
+    )
+
+    # Return a new Connection object with the modified connection string
+    return Connection(
+        connection_string=connection_string, driver=connection.driver, encrypt=connection.encrypt
+    )

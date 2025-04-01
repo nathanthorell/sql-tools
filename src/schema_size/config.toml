@@ -1,0 +1,14 @@
+[schema_size]
+logging_level = "verbose" # "verbose" or "errors_only" or "summary"
+
+[schema_size.connections]
+DEV = "SCHEMA_SIZE_DEV_SERVER"
+QA = "SCHEMA_SIZE_QA_SERVER"
+UAT = "SCHEMA_SIZE_UAT_SERVER"
+PROD = "SCHEMA_SIZE_PROD_SERVER"
+
+[schema_size.databases]
+DEV = ["ProductDB", "SalesDB", "MarketingDB"]
+QA = ["ProductDB", "SalesDB", "MarketingDB"]
+UAT = ["ProductDB", "SalesDB", "MarketingDB"]
+PROD = ["ProductDB", "SalesDB", "MarketingDB"]
