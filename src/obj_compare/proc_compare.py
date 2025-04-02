@@ -2,8 +2,8 @@ import hashlib
 from typing import Dict, Set
 
 import pyodbc
-from prettytable import PrettyTable
 
+from utils.rich_utils import console, create_checksum_table, print_checksum_comparison
 from utils.utils import Connection
 
 
@@ -21,7 +21,7 @@ def fetch_stored_procs(conn: pyodbc.Connection, schema_name: str) -> Dict[str, s
             result[row[0]] = row[1]
         return result
     except Exception as e:
-        print(f"Error fetching stored procedures for schema '{schema_name}': {e}")
+        console.print(f"Error fetching stored procedures for schema '{schema_name}': {e}")
         return {}
     finally:
         cursor.close()
@@ -48,27 +48,26 @@ def compare_proc_definitions(connections: Dict[str, Connection], schema_name: st
         }
 
     # Setup table for results
-    checksum_table = PrettyTable()
-    field_names = ["Procedure Name"] + list(connections.keys())
-    checksum_table.field_names = field_names
-    for field in field_names:
-        checksum_table.align[field] = "l"
-    checksum_table.max_width["Procedure Name"] = 60
+    env_names = list(connections.keys())
+    checksum_table = create_checksum_table(
+        title=f"Stored Procs with Different Definitions in Schema '{schema_name}'",
+        environments=env_names,
+    )
 
     has_differences = False
     for proc_name in sorted(all_proc_names):
         # Get checksums for all environments
-        checksums = [proc_checksums[env].get(proc_name, "N/A") for env in connections.keys()]
+        checksums = [proc_checksums[env].get(proc_name, "N/A") for env in env_names]
 
         # Check if there are differences
         valid_checksums = [cs for cs in checksums]
         if len(set(valid_checksums)) > 1:
             has_differences = True
-            checksum_table.add_row([proc_name] + checksums)
+            checksum_table.add_row(proc_name, *checksums)
 
-    if has_differences:
-        print(f"\nStored procs with Different Definitions in Schema '{schema_name}':\n")
-        print(checksum_table)
-    else:
-        msg = f"\nNo definition differences found in schema '{schema_name}'"
-        print(msg)
+    print_checksum_comparison(
+        table=checksum_table,
+        has_differences=has_differences,
+        schema_name=schema_name,
+        object_type="stored proc",
+    )

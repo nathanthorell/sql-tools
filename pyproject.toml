@@ -9,6 +9,7 @@ dependencies = [
     "pyodbc",
     "python-dotenv",
     "prettytable",
+    "rich",
     "toml",
     "sqlalchemy",
     "pandas",
