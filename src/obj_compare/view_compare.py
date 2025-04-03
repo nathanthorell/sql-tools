@@ -3,7 +3,8 @@ from typing import Dict, Set
 
 import pyodbc
 
-from utils.rich_utils import console, create_checksum_table, print_checksum_comparison
+from obj_compare.compare_utils import ChecksumData, ComparisonResult, print_comparison_result
+from utils.rich_utils import console
 from utils.utils import Connection
 
 
@@ -49,24 +50,16 @@ def compare_view_definitions(connections: Dict[str, Connection], schema_name: st
 
     # Setup table for results
     env_names = list(connections.keys())
-    checksum_table = create_checksum_table(
-        title=f"Views with Different Definitions in Schema '{schema_name}'", environments=env_names
-    )
+    result = ComparisonResult(schema_name=schema_name, object_type="view")
 
-    has_differences = False
     for view_name in sorted(all_view_names):
-        # Get checksums for all environments
         checksums = [view_checksums[env].get(view_name, "N/A") for env in env_names]
 
-        # Check if there are differences, ignore N/A
-        valid_checksums = [cs for cs in checksums]
-        if len(set(valid_checksums)) > 1:
-            has_differences = True
-            checksum_table.add_row(view_name, *checksums)
+        checksum_data = ChecksumData(
+            object_name=view_name, checksums=checksums, environments=env_names
+        )
 
-    print_checksum_comparison(
-        table=checksum_table,
-        has_differences=has_differences,
-        schema_name=schema_name,
-        object_type="view",
-    )
+        if checksum_data.has_differences():
+            result.checksum_rows.append(checksum_data)
+
+    print_comparison_result(result)
