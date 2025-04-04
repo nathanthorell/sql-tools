@@ -24,9 +24,13 @@ class Connection:
     @property
     def server(self) -> str:
         """Extract server name from connection string."""
-        server_match = re.search(r"Server=([^,;]+)", self.connection_string)
+        server_match = re.search(r"Server\s*=\s*([^;]+)", self.connection_string, re.IGNORECASE)
         if server_match:
-            return server_match.group(1).split(",")[0]
+            # Extract the full server portion (might include port)
+            server_port = server_match.group(1).strip()
+            # Split by comma and take the first part as the server name
+            server_name = server_port.split(",")[0].strip()
+            return server_name
         return ""
 
     @property
@@ -61,7 +65,7 @@ class Connection:
         return engine
 
     def __str__(self) -> str:
-        return f"Connection to [{self.server}] database: [{self.database}]"
+        return f"Server: [{self.server}] Database: [{self.database}]"
 
 
 def get_connection(env_var_name: str) -> Connection:
