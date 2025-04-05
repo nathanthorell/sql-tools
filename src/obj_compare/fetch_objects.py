@@ -66,6 +66,7 @@ def get_query_for_object_type(schema_name: str, object_type: str) -> str:
             FROM sys.objects o
             INNER JOIN sys.schemas s ON o.schema_id = s.schema_id
             WHERE o.type = 'P' AND s.name = '{schema_name}'
+            AND OBJECT_NAME(o.object_id) NOT LIKE 'sp[_]diagram%'
             """
 
         case "view":
@@ -86,6 +87,7 @@ def get_query_for_object_type(schema_name: str, object_type: str) -> str:
             FROM sys.objects o
             INNER JOIN sys.schemas s ON o.schema_id = s.schema_id
             WHERE o.type IN ('FN', 'IF', 'TF') AND s.name = '{schema_name}'
+            AND OBJECT_NAME(o.object_id) != 'fn_diagramobjects'
             """
 
         case "table":
@@ -124,8 +126,10 @@ def get_query_for_object_type(schema_name: str, object_type: str) -> str:
             INNER JOIN sys.types ty ON c.user_type_id = ty.user_type_id
             WHERE
                 s.name = '{schema_name}'
-                AND t.is_external = 0  -- Exclude external tables
-                AND t.type = 'U'       -- 'U' means user-created table
+                AND t.is_external = 0
+                AND t.type = 'U'
+                AND t.is_ms_shipped = 0
+                AND t.name NOT IN ('sysdiagrams', 'database_firewall_rules')
             GROUP BY t.name
             """
 
@@ -169,6 +173,44 @@ def get_query_for_object_type(schema_name: str, object_type: str) -> str:
             INNER JOIN sys.schemas s ON seq.schema_id = s.schema_id
             INNER JOIN sys.types t ON seq.user_type_id = t.user_type_id
             WHERE s.name = '{schema_name}'
+            """
+
+        case "index":
+            return f"""
+            SELECT
+                i.name AS index_name,
+                CONCAT(
+                    'ON ', OBJECT_NAME(i.object_id), ' (',
+                    STRING_AGG(
+                        CONCAT(c.name, CASE WHEN ic.is_descending_key = 1
+                        THEN ' DESC' ELSE ' ASC' END),
+                        ', '
+                    ) WITHIN GROUP (ORDER BY ic.key_ordinal),
+                    ')',
+                    CASE WHEN i.is_unique = 1 THEN ' UNIQUE' ELSE '' END,
+                    CASE WHEN i.type = 1 THEN ' CLUSTERED'
+                        WHEN i.type = 2 THEN ' NONCLUSTERED'
+                        WHEN i.type = 3 THEN ' XML'
+                        WHEN i.type = 4 THEN ' SPATIAL'
+                        WHEN i.type = 5 THEN ' CLUSTERED COLUMNSTORE'
+                        WHEN i.type = 6 THEN ' NONCLUSTERED COLUMNSTORE'
+                        WHEN i.type = 7 THEN ' NONCLUSTERED HASH'
+                        ELSE ''
+                    END,
+                    CASE WHEN i.filter_definition IS NOT NULL THEN
+                        CONCAT(' WHERE ', i.filter_definition) ELSE '' END
+                ) AS index_definition
+            FROM sys.indexes i
+            INNER JOIN sys.objects o ON i.object_id = o.object_id
+            INNER JOIN sys.schemas s ON o.schema_id = s.schema_id
+            INNER JOIN sys.index_columns ic
+                ON i.object_id = ic.object_id AND i.index_id = ic.index_id
+            INNER JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
+            WHERE s.name = '{schema_name}'
+            AND i.name IS NOT NULL  -- Skip unnamed indexes (like PK_...)
+            AND o.is_ms_shipped = 0 -- Skip system objects
+            AND i.type > 0 -- Skip heaps
+            GROUP BY i.object_id, i.name, i.is_unique, i.type, i.filter_definition
             """
 
         case _:

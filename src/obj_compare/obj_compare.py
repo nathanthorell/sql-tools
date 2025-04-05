@@ -150,6 +150,7 @@ def main() -> None:
         "table": "table",
         "trigger": "trigger",
         "sequence": "sequence",
+        "index": "index",
     }
 
     for obj_type in object_types:
