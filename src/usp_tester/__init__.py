@@ -1,1 +1,1 @@
-# MSSQL Stored Procedure Tester Tool
+# SQL Stored Procedure Tester Tool

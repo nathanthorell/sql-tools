@@ -112,7 +112,7 @@ def main() -> None:
         except ValueError as e:
             connection_info.append(f"[yellow]{env_name}[/]: Error - {e}")
 
-    header_content = "[bold cyan]MS SQL Object Comparison Tool[/]\n"
+    header_content = "[bold cyan]SQL Object Comparison Tool[/]\n"
 
     term_width = console.width or 100
     if term_width < 100:

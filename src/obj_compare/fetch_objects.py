@@ -209,69 +209,11 @@ def get_query_for_object_type(schema_name: str, object_type: str) -> str:
             WHERE s.name = '{schema_name}'
             AND i.name IS NOT NULL  -- Skip unnamed indexes (like PK_...)
             AND o.is_ms_shipped = 0 -- Skip system objects
+            AND OBJECT_NAME(i.object_id) != 'sysdiagrams' -- Exclude sysdiagrams table
+            AND NOT (i.is_primary_key = 1 AND o.type = 'TF') -- Exclude table-valued functions
             AND i.type > 0 -- Skip heaps
             GROUP BY i.object_id, i.name, i.is_unique, i.type, i.filter_definition
             """
 
         case _:
             return ""
-
-
-# def fetch_stored_procs(conn: pyodbc.Connection, schema_name: str) -> Dict[str, str]:
-#     query = f"""
-#     SELECT ROUTINE_NAME, ROUTINE_DEFINITION
-#     FROM INFORMATION_SCHEMA.ROUTINES
-#     WHERE ROUTINE_TYPE = 'PROCEDURE' AND ROUTINE_SCHEMA = '{schema_name}'
-#     """
-#     cursor = conn.cursor()
-#     result = {}
-#     try:
-#         cursor.execute(query)
-#         for row in cursor.fetchall():
-#             result[row[0]] = row[1]
-#         return result
-#     except Exception as e:
-#         console.print(f"Error fetching stored procedures for schema '{schema_name}': {e}")
-#         return {}
-#     finally:
-#         cursor.close()
-
-
-# def fetch_views(conn: pyodbc.Connection, schema_name: str) -> Dict[str, str]:
-#     query = f"""
-#     SELECT TABLE_NAME, VIEW_DEFINITION
-#     FROM INFORMATION_SCHEMA.VIEWS
-#     WHERE TABLE_SCHEMA = '{schema_name}';
-#     """
-#     cursor = conn.cursor()
-#     result = {}
-#     try:
-#         cursor.execute(query)
-#         for row in cursor.fetchall():
-#             result[row[0]] = row[1]
-#         return result
-#     except Exception as e:
-#         console.print(f"Error fetching views for schema '{schema_name}': {e}")
-#         return {}
-#     finally:
-#         cursor.close()
-
-
-# def fetch_functions(conn: pyodbc.Connection, schema_name: str) -> Dict[str, str]:
-#     query = f"""
-#     SELECT ROUTINE_NAME, ROUTINE_DEFINITION
-#     FROM INFORMATION_SCHEMA.ROUTINES
-#     WHERE ROUTINE_TYPE = 'FUNCTION' AND ROUTINE_SCHEMA = '{schema_name}'
-#     """
-#     cursor = conn.cursor()
-#     result = {}
-#     try:
-#         cursor.execute(query)
-#         for row in cursor.fetchall():
-#             result[row[0]] = row[1]
-#         return result
-#     except Exception as e:
-#         console.print(f"Error fetching functions for schema '{schema_name}': {e}")
-#         return {}
-#     finally:
-#         cursor.close()

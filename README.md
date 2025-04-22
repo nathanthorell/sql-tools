@@ -1,6 +1,6 @@
-# mssql-tools
+# sql-tools
 
-A collection of utility tools for working with Microsoft SQL Server databases.
+A collection of utility tools for working with various dialects of SQL databases.
 
 ## Features
 
@@ -24,15 +24,18 @@ A collection of utility tools for working with Microsoft SQL Server databases.
 ### Requirements
 
 - Python 3.13+
-- ODBC Driver for SQL Server
+- Appropriate database drivers:
+
+    - ODBC Driver for SQL Server (for MSSQL databases)
+    - More drivers to be added for other database types
 
 ### Setup
 
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/nathanthorell/mssql-tools.git
-   cd mssql-tools
+   git clone https://github.com/nathanthorell/sql-tools.git
+   cd sql-tools
    ```
 
 2. Create and activate a virtual environment, then install the package:
@@ -71,7 +74,7 @@ cp .env.example .env
 
 Then adjust the connection strings and other settings according to your environment.
 
-The tools will read these environment variables to establish connections to your SQL Server instances.
+The tools will read these environment variables to establish connections to the various SQL instances.
 
 ### Tool Configurations
 

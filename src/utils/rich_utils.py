@@ -1,6 +1,8 @@
 from rich.console import Console
 
 console = Console()
+console.print()
+console.clear(home=True)
 
 # List of colors to use for any color grouping needs
 # These colors are chosen to be distinguishable in both light and dark terminals

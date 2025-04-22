@@ -19,3 +19,4 @@ data/
 # Misc
 .DS_Store
 .vscode
+.git

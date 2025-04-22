@@ -1,7 +1,7 @@
 [project]
-name = "mssql-tools"
+name = "sql-tools"
 version = "0.0.1"
-description = "Various tools for use in MS SQL Server"
+description = "A collection of utility tools for working with various dialects of SQL databases."
 license = { file = "LICENSE" }
 readme = "README.md"
 requires-python = ">=3.13"
