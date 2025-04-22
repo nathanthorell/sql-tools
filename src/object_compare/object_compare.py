@@ -7,12 +7,16 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.text import Text
 
-from object_compare.compare_utils import ChecksumData, ComparisonResult, print_comparison_result
+from object_compare.compare_utils import (
+    ChecksumData,
+    ComparisonResult,
+    print_comparison_result,
+)
 from object_compare.fetch_objects import (
     fetch_definitions,
 )
+from utils import Connection, get_config, get_connection
 from utils.rich_utils import console
-from utils.utils import Connection, get_config, get_connection
 
 
 def compare_definitions(
@@ -33,8 +37,7 @@ def compare_definitions(
 
         # Fetch objects and calculate checksums for each environment
         for env, connection in connections.items():
-            conn = connection.connect()
-            objects = fetch_definitions(conn, schema_name, object_type)
+            objects = fetch_definitions(connection, schema_name, object_type)
             all_object_names.update(objects.keys())
 
             # Calculate checksums
@@ -44,7 +47,6 @@ def compare_definitions(
                 ]
                 for obj_name, definition in objects.items()
             }
-            conn.close()
             progress.advance(task)
 
         progress.update(

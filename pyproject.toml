@@ -1,6 +1,6 @@
 [project]
 name = "sql-tools"
-version = "0.0.1"
+version = "0.0.2"
 description = "A collection of utility tools for working with various dialects of SQL databases."
 license = { file = "LICENSE" }
 readme = "README.md"
@@ -14,6 +14,7 @@ dependencies = [
     "sqlalchemy",
     "pandas",
     "pyarrow",
+    "psycopg2-binary",
 ]
 
 [project.optional-dependencies]

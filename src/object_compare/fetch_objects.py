@@ -1,13 +1,10 @@
 from typing import Dict
 
-import pyodbc
-
+from utils import Connection
 from utils.rich_utils import console
 
 
-def fetch_definitions(
-    conn: pyodbc.Connection, schema_name: str, object_type: str
-) -> Dict[str, str]:
+def fetch_definitions(conn: Connection, schema_name: str, object_type: str) -> Dict[str, str]:
     """
     Fetch object definitions for a given schema and object type.
 
@@ -25,25 +22,28 @@ def fetch_definitions(
         console.print(f"[yellow]Warning:[/] Unknown object type '{object_type}'")
         return {}
 
-    cursor = conn.cursor()
     result = {}
 
-    try:
-        cursor.execute(query)
-        for row in cursor.fetchall():
-            name = row[0]  # First column is always the object name
-            definition = row[1]  # Second column is always the definition
+    with conn.get_connection() as db_conn:
+        cursor = db_conn.cursor()
+        try:
+            cursor.execute(query)
+            for row in cursor.fetchall():
+                name = row[0]  # First column is always the object name
+                definition = row[1]  # Second column is always the definition
 
-            # Skip objects with NULL definitions
-            if definition:
-                result[name] = definition
+                # Skip objects with NULL definitions
+                if definition:
+                    result[name] = definition
 
-        return result
-    except Exception as e:
-        console.print(f"Error fetching {object_type} definitions for schema '{schema_name}': {e}")
-        return {}
-    finally:
-        cursor.close()
+            return result
+        except Exception as e:
+            console.print(
+                f"Error fetching {object_type} definitions for schema '{schema_name}': {e}"
+            )
+            return {}
+        finally:
+            cursor.close()
 
 
 def get_query_for_object_type(schema_name: str, object_type: str) -> str:
@@ -66,7 +66,7 @@ def get_query_for_object_type(schema_name: str, object_type: str) -> str:
             FROM sys.objects o
             INNER JOIN sys.schemas s ON o.schema_id = s.schema_id
             WHERE o.type = 'P' AND s.name = '{schema_name}'
-            AND OBJECT_NAME(o.object_id) NOT LIKE 'sp[_]diagram%'
+            AND OBJECT_NAME(o.object_id) NOT LIKE 'sp[_]%diagram%'
             """
 
         case "view":

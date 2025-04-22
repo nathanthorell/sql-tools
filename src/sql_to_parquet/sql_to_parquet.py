@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from prettytable import PrettyTable
 from sqlalchemy.engine import Engine
 
-from utils.utils import get_config, get_connection
+from utils import get_config, get_connection
 
 
 @dataclass

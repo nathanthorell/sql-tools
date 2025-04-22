@@ -1,11 +1,15 @@
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-import pyodbc
 from dotenv import load_dotenv
 from prettytable import PrettyTable
 
-from utils.utils import Connection, get_config, get_connection, modify_connection_for_database
+from utils import (
+    Connection,
+    get_config,
+    get_connection,
+    modify_connection_for_database,
+)
 
 
 @dataclass
@@ -81,7 +85,7 @@ class ServerResults:
         return DatabaseSize(total_mb, data_mb, index_mb)
 
 
-def fetch_schema_sizes(conn: pyodbc.Connection) -> List[SchemaSize]:
+def fetch_schema_sizes(conn: Connection) -> List[SchemaSize]:
     query = """
     SELECT
         s.name AS SchemaName,
@@ -97,23 +101,24 @@ def fetch_schema_sizes(conn: pyodbc.Connection) -> List[SchemaSize]:
     ORDER BY TotalSizeMB DESC;
     """
 
-    cursor = conn.cursor()
-    try:
-        cursor.execute(query)
-        return [
-            SchemaSize(
-                schema_name=row.SchemaName,
-                total_mb=row.TotalSizeMB,
-                data_mb=row.DataSizeMB,
-                index_mb=row.IndexSizeMB,
-            )
-            for row in cursor.fetchall()
-        ]
-    except Exception as e:
-        print(f"Error fetching schema sizes: {e}")
-        return []
-    finally:
-        cursor.close()
+    with conn.get_connection() as db_conn:
+        cursor = db_conn.cursor()
+        try:
+            cursor.execute(query)
+            return [
+                SchemaSize(
+                    schema_name=row[0],
+                    total_mb=row[1],
+                    data_mb=row[2],
+                    index_mb=row[3],
+                )
+                for row in cursor.fetchall()
+            ]
+        except Exception as e:
+            print(f"Error fetching schema sizes: {e}")
+            return []
+        finally:
+            cursor.close()
 
 
 def process_database(
@@ -121,9 +126,7 @@ def process_database(
 ) -> Optional[DatabaseSize]:
     try:
         db_connection = modify_connection_for_database(connection, db_name)
-        conn = db_connection.connect()
-
-        schema_sizes = fetch_schema_sizes(conn)
+        schema_sizes = fetch_schema_sizes(db_connection)
 
         db_total_mb = sum(schema.total_mb for schema in schema_sizes)
         db_data_mb = sum(schema.data_mb for schema in schema_sizes)
@@ -153,8 +156,6 @@ def process_database(
                 f"Index: {db_index_mb:.2f} MB)\n"
             )
             print("-" * 80)
-
-        conn.close()
 
         return db_size
 

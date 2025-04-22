@@ -80,3 +80,19 @@ databases.DEV = ["DevDB1", "DevDB2", "DevDB3"]
 databases.QA = ["QaDB1", "QaDB2"]
 databases.UAT = ["UatDB1", "UatDB2"]
 databases.PROD = ["ProdDB1", "ProdDB2", "ProdDB3"]
+
+######################################################################################
+[data_compare]
+
+[[data_compare.compare_list]]
+name = "Example Comparison"
+left_connection = "DATA_COMPARE_LEFT_DB"
+right_connection = "DATA_COMPARE_RIGHT_DB"
+left_db_type = "mssql"
+right_db_type = "pg"
+left_query = """
+SELECT 1 AS column_one, 2 AS column_two
+"""
+right_query = """
+SELECT 1 AS column_one, 2 AS column_two
+"""

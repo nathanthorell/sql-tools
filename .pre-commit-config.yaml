@@ -35,4 +35,5 @@ repos:
             pandas,
             pandas-stubs,
             sqlalchemy,
+            types-psycopg2,
           ]
