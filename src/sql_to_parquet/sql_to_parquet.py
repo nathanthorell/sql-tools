@@ -6,12 +6,11 @@ from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import pyodbc
-import toml
 from dotenv import load_dotenv
 from prettytable import PrettyTable
 from sqlalchemy.engine import Engine
 
-from utils.utils import get_connection
+from utils.utils import get_config, get_connection
 
 
 @dataclass
@@ -52,18 +51,16 @@ class ExportConfig:
     objects: List[SqlObject] = field(default_factory=list)
 
     @classmethod
-    def from_toml(cls, config_dict: Dict[str, Any]) -> "ExportConfig":
+    def from_dict(cls, config_dict: Dict[str, Any]) -> "ExportConfig":
         """Create an ExportConfig instance from a TOML config dictionary."""
-        sql_to_parquet_config = config_dict["sql_to_parquet"]
-
         config = cls(
-            data_dir=sql_to_parquet_config.get("data_dir", "./data/"),
-            batch_size=sql_to_parquet_config.get("batch_size", 10000),
-            logging_level=sql_to_parquet_config.get("logging_level", "summary"),
+            data_dir=config_dict.get("data_dir", "./data/"),
+            batch_size=config_dict.get("batch_size", 10000),
+            logging_level=config_dict.get("logging_level", "summary"),
         )
 
         # Parse the objects list
-        objects_list = sql_to_parquet_config.get("objects", [])
+        objects_list = config_dict.get("objects", [])
         for obj_dict in objects_list:
             config.objects.append(
                 SqlObject(
@@ -170,13 +167,8 @@ def print_results_summary(results: List[ExportResult], logging_level: str) -> No
 
 def main() -> None:
     load_dotenv()
-    script_dir = os.path.dirname(os.path.realpath(__file__))
-    config_path = os.path.join(script_dir, "config.toml")
-
-    # Load and parse configuration
-    with open(config_path, "r") as f:
-        config_dict = toml.load(f)
-        export_config = ExportConfig.from_toml(config_dict)
+    tool_config = get_config("sql_to_parquet")
+    export_config = ExportConfig.from_dict(tool_config)
 
     # Convert data_dir to absolute path if it's relative
     if not os.path.isabs(export_config.data_dir):

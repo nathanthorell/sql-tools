@@ -1,13 +1,11 @@
-import os
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import pyodbc
-import toml
 from dotenv import load_dotenv
 from prettytable import PrettyTable
 
-from utils.utils import Connection, get_connection, modify_connection_for_database
+from utils.utils import Connection, get_config, get_connection, modify_connection_for_database
 
 
 @dataclass
@@ -291,41 +289,21 @@ def print_server_summary(server_results: Dict[str, ServerResults]) -> None:
         )
 
 
-def parse_config(config_path: str) -> Dict[str, Any]:
-    """Parse the configuration file and return structured configuration objects."""
-    with open(config_path, "r") as f:
-        config = toml.load(f)
-        schema_size_config = config["schema_size"]
-        env_variables = schema_size_config["connections"]
-        databases_config = schema_size_config["databases"]
-        logging_level = schema_size_config.get("logging_level", "verbose")
+def main() -> None:
+    """Main entry point for schema size analysis tool."""
+    print("Running Schema Size...")
+    load_dotenv()
+    schema_size_config = get_config("schema_size")
+    env_variables = schema_size_config["connections"]
+    databases_config = schema_size_config["databases"]
+    logging_level = schema_size_config.get("logging_level", "verbose")
 
-    # Create ServerDatabases objects for each server
     server_configs = {}
     for server_name in env_variables:
         if server_name in databases_config:
             server_configs[server_name] = ServerDatabases(
                 server_name=server_name, databases=databases_config[server_name]
             )
-
-    return {
-        "server_configs": server_configs,
-        "env_variables": env_variables,
-        "logging_level": logging_level,
-    }
-
-
-def main() -> None:
-    """Main entry point for schema size analysis tool."""
-    print("Running Schema Size...")
-    load_dotenv()
-    script_dir = os.path.dirname(os.path.realpath(__file__))
-    config_path = os.path.join(script_dir, "config.toml")
-
-    config = parse_config(config_path)
-    server_configs = config["server_configs"]
-    env_variables = config["env_variables"]
-    logging_level = config["logging_level"]
 
     # TODO: Actually handle logging_level for better printing possibly using verbose
     # to print all databases and summary to print server level summary

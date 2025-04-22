@@ -1,0 +1,82 @@
+######################################################################################
+[sql_tools]
+logging_level = "summary" # "verbose", "errors_only", or "summary"
+
+######################################################################################
+[object_compare]
+schema = "report"
+object_types = [
+    "stored_proc",
+    "view",
+    "function",
+    "table",
+    "trigger",
+    "sequence",
+    "index",
+]
+
+[object_compare.environments]
+DEV = "OBJ_COMPARE_DEV_DB"
+QA = "OBJ_COMPARE_QA_DB"
+UAT = "OBJ_COMPARE_UAT_DB"
+PROD = "OBJ_COMPARE_PROD_DB"
+
+######################################################################################
+[usp_tester]
+schema = "report"
+
+[usp_tester.defaults]
+start_date = "2024-01-01"
+end_date = "2024-01-31"
+start_datetime = "2023-01-01 00:00:00"
+end_datetime = "2023-01-31 23:59:59"
+integer = 100
+bit = 1
+decimal = 0.0
+varchar = "12345"
+
+######################################################################################
+[view_tester]
+schema = "report"
+
+######################################################################################
+[sql_to_parquet]
+data_dir = "./data/"
+batch_size = 10000
+
+# List of objects to export
+# Each object has:
+#   - name: Friendly name for the output file (without .parquet extension)
+#   - object: SQL object name in format "schema.object" or just "object" (defaults to dbo)
+#   - filter: Optional SQL WHERE clause to filter data
+[[sql_to_parquet.objects]]
+name = "customers"
+object = "dbo.Customers"
+filter = "IsActive = 1"
+
+[[sql_to_parquet.objects]]
+name = "orders"
+object = "sales.vw_OrderDetails"
+filter = "OrderDate >= '2023-01-01'"
+
+[[sql_to_parquet.objects]]
+name = "products"
+object = "inventory.Products"
+
+# Example with default dbo schema (will use dbo.Employees)
+[[sql_to_parquet.objects]]
+name = "employees"
+object = "Employees"
+filter = "Department = 'Engineering'"
+
+######################################################################################
+[schema_size]
+connections.DEV = "SCHEMA_SIZE_DEV_SERVER"
+connections.QA = "SCHEMA_SIZE_QA_SERVER"
+connections.UAT = "SCHEMA_SIZE_UAT_SERVER"
+connections.PROD = "SCHEMA_SIZE_PROD_SERVER"
+
+databases.DEV = ["DevDB1", "DevDB2", "DevDB3"]
+databases.QA = ["QaDB1", "QaDB2"]
+databases.UAT = ["UatDB1", "UatDB2"]
+databases.PROD = ["ProdDB1", "ProdDB2", "ProdDB3"]

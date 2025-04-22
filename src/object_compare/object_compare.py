@@ -1,8 +1,6 @@
 import hashlib
-import os
 from typing import Dict, Set
 
-import toml
 from dotenv import load_dotenv
 from rich.markup import escape
 from rich.panel import Panel
@@ -14,7 +12,7 @@ from object_compare.fetch_objects import (
     fetch_definitions,
 )
 from utils.rich_utils import console
-from utils.utils import Connection, get_connection
+from utils.utils import Connection, get_config, get_connection
 
 
 def compare_definitions(
@@ -91,15 +89,12 @@ def compare_definitions(
 
 def main() -> None:
     load_dotenv()
-    script_dir = os.path.dirname(os.path.realpath(__file__))
-    config_path = os.path.join(script_dir, "config.toml")
-
-    with open(config_path, "r") as f:
-        config = toml.load(f)
-        obj_compare_config = config["sql_object_compare"]
-        schema: str = obj_compare_config["schema"]
-        environments = obj_compare_config.get("environments", {})
-        object_types = obj_compare_config.get("object_types", ["stored_proc", "view", "function"])
+    object_compare_config = get_config("object_compare")
+    schema = object_compare_config["schema"]
+    environments = object_compare_config.get("environments", {})
+    object_types = object_compare_config.get(
+        "object_types", ["stored_proc", "view", "function"]
+    )  # use these as defaults if nothing is in the config
 
     connections: Dict[str, Connection] = {}
     connection_info = []

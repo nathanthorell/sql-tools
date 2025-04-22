@@ -16,6 +16,9 @@ build/
 *.spec
 data/
 
+# Config
+config.toml
+
 # Misc
 .DS_Store
 .vscode

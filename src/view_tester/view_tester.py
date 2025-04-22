@@ -1,13 +1,11 @@
-import os
 import re
 import time
 from typing import Any, Dict, List
 
 import pyodbc
-import toml
 from dotenv import load_dotenv
 
-from utils.utils import get_connection
+from utils.utils import get_config, get_connection
 
 
 def fetch_views(conn: pyodbc.Connection, schema: str) -> List[str]:
@@ -121,14 +119,9 @@ def print_results_summary(results: List[Dict[str, Any]], logging_level: str) -> 
 
 def main() -> None:
     load_dotenv()
-    script_dir = os.path.dirname(os.path.realpath(__file__))
-    config_path = os.path.join(script_dir, "config.toml")
-
-    with open(config_path, "r") as f:
-        config = toml.load(f)
-        view_config = config["view_tester"]
-        schema = view_config["schema"]
-        logging_level = view_config["logging_level"]
+    view_config = get_config("view_tester")
+    schema = view_config["schema"]
+    logging_level = view_config["logging_level"]
 
     connection = get_connection("VIEW_TEST_DB")
     conn = connection.connect()
