@@ -9,8 +9,8 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.text import Text
 
-from obj_compare.compare_utils import ChecksumData, ComparisonResult, print_comparison_result
-from obj_compare.fetch_objects import (
+from object_compare.compare_utils import ChecksumData, ComparisonResult, print_comparison_result
+from object_compare.fetch_objects import (
     fetch_definitions,
 )
 from utils.rich_utils import console

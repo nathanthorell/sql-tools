@@ -4,10 +4,10 @@ A collection of utility tools for working with various dialects of SQL databases
 
 ## Features
 
-- **Object Comparison Tool** (`obj_compare`): Compare stored procedures and views across different environments (DEV, QA, UAT, PROD)
+- **Object Comparison Tool** (`object_compare`): Compare definitions of stored procedures, views, functions, tables, triggers, and sequences across different environments (DEV, QA, UAT, PROD)
 
   - Identify exclusive objects that exist in only one environment
-  - Check for definition differences in stored procedures across environments
+  - Check for definition differences in objects across environments
 
 - **Stored Procedure Tester** (`usp_tester`): Batch test execution of stored procedures with configurable parameters
   - Support for default parameter values
@@ -18,6 +18,10 @@ A collection of utility tools for working with various dialects of SQL databases
   - Runs a "TOP 1 *" for each view to ensure output is valid
   - Execution time tracking
   - Different logging levels (summary, verbose)
+
+- **Schema Size** (`schema_size`): Analyzes storage across databases by measuring schema sizes.
+  - The tool connects to multiple servers, calculates data and index space consumption in megabytes, and generates formatted tabular reports comparing schema sizes.
+  - Results are displayed with customizable detail levels based on logging preferences.
 
 ## Installation
 
@@ -83,20 +87,22 @@ Each tool includes a default `config.toml` file in its respective directory. Adj
 - **Object Compare**: Set the schema name to compare across environments
 - **USP Tester**: Configure the schema, logging level, and default parameter values for stored procedures
 - **View Tester**: Configure the schema and logging level
+- **Schema Size**: Configure the server connections, databases to compare, and logging level
 
 ## Usage
 
 ### Object Comparison Tool
 
 ```bash
-obj_compare
+object_compare
 ```
 
 This will:
 
-1. Compare stored procedures across all configured environments
-2. Find views exclusive to specific environments
-3. Compare stored procedure definitions across environments
+1. Connect to each configured environment using the specified connection strings
+1. Compare object definitions across environments for each object type
+1. Report differences in object definitions using checksums
+1. Highlight objects that exist in one environment but not others
 
 ### Stored Procedure Tester
 
@@ -122,6 +128,19 @@ This will:
 1. Connect to the configured test database
 2. Execute all views in the specified schema
 3. Report execution status and timing
+
+### Schema Size
+
+```bash
+schema_size
+```
+
+This will:
+
+1. Connect to each server using the specified connection strings
+1. Calculate size metrics for each database and schema
+1. Generate reports showing data and index sizes per schema
+1. Provide comparative summaries across all servers and databases
 
 ## Development
 
