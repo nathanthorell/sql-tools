@@ -23,6 +23,12 @@ A collection of utility tools for working with various dialects of SQL databases
   - The tool connects to multiple servers, calculates data and index space consumption in megabytes, and generates formatted tabular reports comparing schema sizes.
   - Results are displayed with customizable detail levels based on logging preferences.
 
+- **Data Compare** (`data_compare`): Compare data across different database platforms
+  - Support for MSSQL and PostgreSQL databases
+  - Compare data using custom SQL queries
+  - Option to use query files for complex comparisons
+  - Detailed reporting on differences between datasets
+
 ## Installation
 
 ### Requirements
@@ -82,12 +88,17 @@ The tools will read these environment variables to establish connections to the 
 
 ### Tool Configurations
 
-Each tool includes a default `config.toml` file in its respective directory. Adjust the settings according to your specific needs:
+Create a `config.toml` file in the project root directory based on the provided `config-example.toml`:
+
+```bash
+cp config-example.toml config.toml
+```
 
 - **Object Compare**: Set the schema name to compare across environments
 - **USP Tester**: Configure the schema, logging level, and default parameter values for stored procedures
 - **View Tester**: Configure the schema and logging level
 - **Schema Size**: Configure the server connections, databases to compare, and logging level
+- **Data Compare**: Configure named comparison pairs with left/right database connections, database types (MSSQL/PostgreSQL), and queries or query files to compare
 
 ## Usage
 
@@ -113,9 +124,9 @@ usp_tester
 This will:
 
 1. Connect to the configured test database
-2. Execute all stored procedures in the specified schema
-3. Apply default parameter values
-4. Report execution status and timing
+1. Execute all stored procedures in the specified schema
+1. Apply default parameter values
+1. Report execution status and timing
 
 ### View Tester
 
@@ -126,8 +137,8 @@ view_tester
 This will:
 
 1. Connect to the configured test database
-2. Execute all views in the specified schema
-3. Report execution status and timing
+1. Execute all views in the specified schema
+1. Report execution status and timing
 
 ### Schema Size
 
@@ -141,6 +152,18 @@ This will:
 1. Calculate size metrics for each database and schema
 1. Generate reports showing data and index sizes per schema
 1. Provide comparative summaries across all servers and databases
+
+### Data Compare
+
+```bash
+data_compare
+```
+
+1. Connect to the configured database sources (supports both MSSQL and PostgreSQL)
+1. Execute the defined queries against both data sources
+1. Compare the results of both queries
+1. Generate a detailed report of matching and non-matching data
+1. Display performance comparison between execution time of each data source
 
 ## Development
 
