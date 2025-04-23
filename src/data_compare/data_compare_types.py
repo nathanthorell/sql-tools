@@ -47,35 +47,10 @@ class ComparisonResult:
 
         try:
             self.shape_match = left_df.shape == right_df.shape
+            self.columns_match = self._check_column_match(left_df, right_df)
 
-            # Check if they have the same column names
-            self.columns_match = set(left_df.columns) == set(right_df.columns)
-
-            # For exact comparison, we need matched columns
             if self.columns_match:
-                # Sort columns to ensure same order for comparison
-                left_sorted = left_df[sorted(left_df.columns)]
-                right_sorted = right_df[sorted(right_df.columns)]
-
-                # Check if all values match
-                self.is_equal = left_sorted.equals(right_sorted)
-
-                # Calculate differences if needed
-                if not self.is_equal:
-                    # Find rows that are in left but not in right
-                    self.left_only = left_sorted.merge(right_sorted, how="left", indicator=True)
-                    self.left_only = self.left_only[self.left_only["_merge"] == "left_only"].drop(
-                        "_merge", axis=1
-                    )
-
-                    # Find rows that are in right but not in left
-                    self.right_only = right_sorted.merge(left_sorted, how="left", indicator=True)
-                    self.right_only = self.right_only[
-                        self.right_only["_merge"] == "left_only"
-                    ].drop("_merge", axis=1)
-
-                    # Find common rows
-                    self.common_rows = left_sorted.merge(right_sorted, how="inner")
+                self._compare_dataframes(left_df, right_df)
 
         except Exception as e:
             console.print(f"[dim]Error during DataFrame comparison: {e}[/]")
@@ -88,19 +63,119 @@ class ComparisonResult:
             f"Right: {self.right.row_count} rows, {self.right.duration:.2f}s"
         )
 
+    def _check_column_match(self, left_df: pd.DataFrame, right_df: pd.DataFrame) -> bool:
+        """Check if column names match between dataframes (case-insensitive)"""
+        left_cols_lower = {col.lower() for col in left_df.columns}
+        right_cols_lower = {col.lower() for col in right_df.columns}
+        return left_cols_lower == right_cols_lower
+
+    def _normalize_column_names(
+        self, left_df: pd.DataFrame, right_df: pd.DataFrame
+    ) -> pd.DataFrame:
+        """Create a copy of right_df with column names matching left_df's case"""
+        col_mapping = {}
+        for left_col in left_df.columns:
+            for right_col in right_df.columns:
+                if left_col.lower() == right_col.lower():
+                    col_mapping[right_col] = left_col
+                    break
+
+        # Return a copy with renamed columns to match left case
+        if col_mapping:
+            return right_df.rename(columns=col_mapping)
+        return right_df.copy()
+
+    def _normalize_data_types(
+        self, left_df: pd.DataFrame, right_df: pd.DataFrame
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """Normalize data types between dataframes for consistent comparison"""
+        left_normalized = left_df.copy()
+        right_normalized = right_df.copy()
+
+        for col in left_df.columns:
+            # String type normalization
+            if left_df[col].dtype == object or right_df[col].dtype == object:
+                left_normalized[col] = left_normalized[col].astype(str).str.strip()
+                right_normalized[col] = right_normalized[col].astype(str).str.strip()
+
+            # Numeric type normalization
+            elif pd.api.types.is_numeric_dtype(left_df[col]) and pd.api.types.is_numeric_dtype(
+                right_df[col]
+            ):
+                left_normalized[col] = pd.to_numeric(left_normalized[col], errors="coerce")
+                right_normalized[col] = pd.to_numeric(right_normalized[col], errors="coerce")
+
+            # Date type normalization
+            elif pd.api.types.is_datetime64_dtype(left_df[col]) or pd.api.types.is_datetime64_dtype(
+                right_df[col]
+            ):
+                try:
+                    left_normalized[col] = pd.to_datetime(left_normalized[col], errors="coerce")
+                    right_normalized[col] = pd.to_datetime(right_normalized[col], errors="coerce")
+                except Exception:
+                    # Fallback to string comparison if datetime conversion fails
+                    left_normalized[col] = left_normalized[col].astype(str).str.strip()
+                    right_normalized[col] = right_normalized[col].astype(str).str.strip()
+
+        return left_normalized, right_normalized
+
+    def _compare_dataframes(self, left_df: pd.DataFrame, right_df: pd.DataFrame) -> None:
+        """Compare two dataframes and identify matching/non-matching rows"""
+        # Normalize column names to match case
+        right_df_normalized = self._normalize_column_names(left_df, right_df)
+
+        # Normalize data types for proper comparison
+        left_normalized, right_normalized = self._normalize_data_types(left_df, right_df_normalized)
+
+        # Sort columns for consistent comparison
+        left_sorted = left_normalized[sorted(left_normalized.columns)]
+        right_sorted = right_normalized[sorted(right_normalized.columns)]
+
+        # Perform the merge to identify differences
+        merged = left_sorted.merge(right_sorted, how="outer", indicator=True)
+
+        # Extract the results
+        self.left_only = merged[merged["_merge"] == "left_only"].drop("_merge", axis=1)
+        self.right_only = merged[merged["_merge"] == "right_only"].drop("_merge", axis=1)
+        self.common_rows = merged[merged["_merge"] == "both"].drop("_merge", axis=1)
+
+        # Sets is_equal if we have no differences (both sets match entirely)
+        left_only_count = len(self.left_only)
+        right_only_count = len(self.right_only)
+        both_count = len(self.common_rows)
+
+        self.is_equal = left_only_count == 0 and right_only_count == 0 and both_count > 0
+
+    def calculate_performance_metrics(self) -> dict[str, str]:
+        """Calculate performance metrics between left and right queries."""
+        metrics = {
+            "perf_text": "N/A",
+            "perf_color": "white",
+        }
+
+        if self.left.duration > 0 and self.right.duration > 0:
+            if self.right.duration < self.left.duration:
+                # Right is faster
+                speedup_factor = self.left.duration / self.right.duration
+                metrics["perf_text"] = f"Right query is {speedup_factor:.2f}x faster than left"
+                metrics["perf_color"] = "green"
+            elif self.right.duration > self.left.duration:
+                # Right is slower
+                slowdown_factor = self.right.duration / self.left.duration
+                metrics["perf_text"] = f"Right query is {slowdown_factor:.2f}x slower than left"
+                metrics["perf_color"] = "yellow" if slowdown_factor < 2 else "red"
+            else:
+                # Equal times
+                metrics["perf_text"] = "Both queries performed at the same speed"
+
+        return metrics
+
     def rich_display(self) -> None:
         """Display the comparison result using Rich formatting"""
         status_color = "green" if self.is_equal else "red"
         row_color = "green" if self.row_count_match else "yellow"
 
-        # Performance comparison
-        if self.left.duration > 0 and self.right.duration > 0:
-            perf_ratio = self.right.duration / self.left.duration
-            perf_text = f"{perf_ratio:.2f}x" + (" faster" if perf_ratio < 1 else " slower")
-            perf_color = "green" if perf_ratio < 1 else "yellow" if perf_ratio < 2 else "red"
-        else:
-            perf_text = "N/A"
-            perf_color = "white"
+        perf_metrics = self.calculate_performance_metrics()
 
         console.rule(
             f"[bold]Comparison Result: [{status_color}]"
@@ -115,7 +190,9 @@ class ComparisonResult:
                 + f"[bold {row_color}]{self.right.row_count}[/]"
             )
 
-        console.print(f"[bold]Performance:[/] [{perf_color}]{perf_text}[/]")
+        console.print(
+            f"[bold]Performance:[/] [{perf_metrics['perf_color']}]{perf_metrics['perf_text']}[/]"
+        )
 
         table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2, 0, 0))
         table.add_column("Query", style="dim")
@@ -170,9 +247,7 @@ class ComparisonResult:
 
                 console.print(diff_table)
 
-                # Show sample differences if they exist
                 max_samples = 5
-
                 if not self.left_only.empty:
                     left_sample_count = min(max_samples, len(self.left_only))
                     console.print(
@@ -200,10 +275,8 @@ def display_sample_rows(description: str, rows: Sequence[Any], sample_size: int 
         f"\n[bold]Sample rows in {description} ([cyan]{sample_size}[/] of {len(rows)}):[/]"
     )
 
-    # Get sample rows
     samples = list(rows)[:sample_size]
 
-    # Create a simple table
     table = Table(box=None, padding=(0, 1))
 
     # Check if we have tuple/list data (multi-column) or single values
@@ -212,7 +285,6 @@ def display_sample_rows(description: str, rows: Sequence[Any], sample_size: int 
         for i in range(len(samples[0])):
             table.add_column(f"Col {i + 1}")
 
-        # Add each row to the table
         for row in samples:
             table.add_row(*[str(cell) for cell in row])
     else:
@@ -271,7 +343,6 @@ class ComparisonConfig:
             if not right_query:
                 raise ValueError(f"Comparison '{item['name']}' is missing a right query")
 
-            # Create ComparisonItem instance
             comparison = ComparisonItem(
                 name=item["name"],
                 left_connection=item["left_connection"],
