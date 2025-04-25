@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Sequence, Union
+from typing import Any, Dict, List, Union
 
 import pandas as pd
 import psycopg2
@@ -8,6 +8,7 @@ import pyodbc
 from rich.pretty import Pretty
 from rich.table import Table
 
+from utils import Connection, get_connection, modify_connection_for_database
 from utils.rich_utils import COLORS, console
 
 ConnectionType = Union[pyodbc.Connection, "psycopg2.extensions.connection"]
@@ -267,42 +268,13 @@ class ComparisonResult:
         console.print()
 
 
-def display_sample_rows(description: str, rows: Sequence[Any], sample_size: int = 5) -> None:
-    """Display sample rows in a simple table format"""
-    from rich.table import Table
-
-    console.print(
-        f"\n[bold]Sample rows in {description} ([cyan]{sample_size}[/] of {len(rows)}):[/]"
-    )
-
-    samples = list(rows)[:sample_size]
-
-    table = Table(box=None, padding=(0, 1))
-
-    # Check if we have tuple/list data (multi-column) or single values
-    if samples and isinstance(samples[0], (tuple, list)):
-        # For multi-column data, just add a generic "column" header for each field
-        for i in range(len(samples[0])):
-            table.add_column(f"Col {i + 1}")
-
-        for row in samples:
-            table.add_row(*[str(cell) for cell in row])
-    else:
-        # For single values, use a simple one-column table
-        table.add_column("Value")
-        for value in samples:
-            table.add_row(str(value))
-
-    console.print(table)
-
-
 @dataclass
 class ComparisonItem:
     """Type definition for a single comparison configuration"""
 
     name: str
-    left_connection: str
-    right_connection: str
+    left_connection: Connection
+    right_connection: Connection
     left_query: str
     right_query: str
     left_db_type: str = "mssql"
@@ -343,10 +315,24 @@ class ComparisonConfig:
             if not right_query:
                 raise ValueError(f"Comparison '{item['name']}' is missing a right query")
 
+            # Get base connections
+            left_conn = get_connection(
+                item["left_connection"], db_type=item.get("left_db_type", "mssql")
+            )
+            right_conn = get_connection(
+                item["right_connection"], db_type=item.get("right_db_type", "mssql")
+            )
+
+            # Check for database overrides and modify connections if needed
+            if "left_database" in item:
+                left_conn = modify_connection_for_database(left_conn, item["left_database"])
+            if "right_database" in item:
+                right_conn = modify_connection_for_database(right_conn, item["right_database"])
+
             comparison = ComparisonItem(
                 name=item["name"],
-                left_connection=item["left_connection"],
-                right_connection=item["right_connection"],
+                left_connection=left_conn,
+                right_connection=right_conn,
                 left_query=left_query,
                 right_query=right_query,
                 left_db_type=item.get("left_db_type", "mssql"),

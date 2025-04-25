@@ -1,11 +1,14 @@
+import os
+import re
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional, Tuple
 
 import pandas as pd
 from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
 
 from data_compare.data_compare_types import ComparisonConfig, ComparisonResult, QueryResult
-from utils import Connection, get_connection
+from utils import Connection
 from utils.rich_utils import COLORS, console
 
 
@@ -80,24 +83,25 @@ def run_comparisons(config: ComparisonConfig) -> bool:
     console.print("[italic]Comparing queries across database systems[/]", justify="center")
     console.print()
 
+    # Get output settings
+    output_type = config.config.get("output", None)
+    output_dir = config.config.get("output_file_path", "./output/")
+    output_format = config.config.get("output_format", "csv")
+    timestamp_file = config.config.get("timestamp_file", False)
+
     for i, comparison in enumerate(config.comparisons):
         name = comparison.name
         color = COLORS[i % len(COLORS)]
         console.print()
         console.rule(f"[bold {color}]{name}[/]")
 
-        left_conn = None
-        right_conn = None
+        left_conn = comparison.left_connection
+        right_conn = comparison.right_connection
 
         try:
             console.print(f"Left database type:  [{color}]{comparison.left_db_type}[/]")
             console.print(f"Right database type: [{color}]{comparison.right_db_type}[/]")
             console.print()
-
-            left_conn = get_connection(comparison.left_connection, db_type=comparison.left_db_type)
-            right_conn = get_connection(
-                comparison.right_connection, db_type=comparison.right_db_type
-            )
 
             result = compare_sql(
                 left_conn=left_conn,
@@ -105,6 +109,30 @@ def run_comparisons(config: ComparisonConfig) -> bool:
                 left_query=comparison.left_query,
                 right_query=comparison.right_query,
             )
+
+            # Handle output file generation if configured
+            if output_type and output_dir:
+                match output_type:
+                    case "left_only" | "both":
+                        if not result.left_only.empty:
+                            generate_output_file(
+                                f"{name}_left_only",
+                                result.left_only,
+                                output_dir,
+                                output_format,
+                                timestamp_file,
+                            )
+                    case "right_only" | "both":
+                        if not result.right_only.empty:
+                            generate_output_file(
+                                f"{name}_right_only",
+                                result.right_only,
+                                output_dir,
+                                output_format,
+                                timestamp_file,
+                            )
+                    case _:
+                        console.print(f"[yellow]Unknown output type: {output_type}[/]")
 
             if not result.is_equal:
                 success = False
@@ -121,3 +149,53 @@ def run_comparisons(config: ComparisonConfig) -> bool:
     console.print()
 
     return success
+
+
+def load_sql_file(file_path: str) -> str:
+    """Load SQL query from a file"""
+    from pathlib import Path
+
+    sql_path = Path(file_path)
+
+    if not sql_path.exists():
+        raise FileNotFoundError(f"SQL file not found: {sql_path}")
+
+    with open(sql_path) as f:
+        return f.read()
+
+
+def generate_output_file(
+    name: str,
+    dataset: pd.DataFrame,
+    output_dir: str,
+    format: str = "csv",
+    timestamp_file: bool = False,
+) -> str:
+    """Generate an output file from a dataset."""
+    output_path = Path(output_dir)
+    os.makedirs(output_path, exist_ok=True)
+
+    clean_name = name.lower()
+    clean_name = clean_name.replace(" ", "_")
+    clean_name = re.sub(r"_+", "_", clean_name)
+    clean_name = re.sub(r"[^a-z0-9_-]", "", clean_name)
+
+    # Determine filename based on timestamp preference
+    if timestamp_file:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{name}_{timestamp}"
+    else:
+        filename = clean_name
+
+    file_path = Path()
+    if format.lower() == "csv":
+        file_path = output_path / f"{filename}.csv"
+        dataset.to_csv(file_path, index=False)
+    elif format.lower() == "json":
+        file_path = output_path / f"{filename}.json"
+        dataset.to_json(file_path, orient="records", lines=True)
+    else:
+        raise ValueError(f"Unsupported format: {format}")
+
+    console.print(f"[green]Output saved to:[/] {file_path}")
+    return str(file_path)
