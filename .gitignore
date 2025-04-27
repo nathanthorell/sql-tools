@@ -15,6 +15,7 @@ build/
 *.egg-info/
 *.spec
 data/
+output/
 
 # Config
 config.toml
