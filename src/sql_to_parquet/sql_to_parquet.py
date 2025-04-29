@@ -1,76 +1,17 @@
 import os
 import time
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import List
 
 import pandas as pd
 import pyodbc
 from dotenv import load_dotenv
-from prettytable import PrettyTable
+from rich.progress import Progress, SpinnerColumn, TextColumn
 from sqlalchemy.engine import Engine
 
+from sql_to_parquet.sql_to_parquet_types import ExportConfig, ExportResult, SqlObject
 from utils import get_config, get_connection
-
-
-@dataclass
-class SqlObject:
-    name: str  # Friendly name for the output file
-    object: str  # SQL object name (schema.object or just object)
-    filter: str = ""  # Optional WHERE clause
-
-    @property
-    def schema(self) -> str:
-        """Get the schema part of the object name."""
-        parts = self.object.split(".", 1)
-        return parts[0] if len(parts) == 2 else "dbo"
-
-    @property
-    def object_name(self) -> str:
-        """Get the object name part without schema."""
-        parts = self.object.split(".", 1)
-        return parts[1] if len(parts) == 2 else parts[0]
-
-
-@dataclass
-class ExportResult:
-    friendly_name: str
-    full_object_name: str
-    status: str = "Success"
-    elapsed_time: Optional[float] = None
-    rows_processed: int = 0
-    file_path: Optional[str] = None
-    error_message: Optional[str] = None
-
-
-@dataclass
-class ExportConfig:
-    data_dir: str = "./data/"
-    batch_size: int = 10000
-    logging_level: str = "summary"
-    objects: List[SqlObject] = field(default_factory=list)
-
-    @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any]) -> "ExportConfig":
-        """Create an ExportConfig instance from a TOML config dictionary."""
-        config = cls(
-            data_dir=config_dict.get("data_dir", "./data/"),
-            batch_size=config_dict.get("batch_size", 10000),
-            logging_level=config_dict.get("logging_level", "summary"),
-        )
-
-        # Parse the objects list
-        objects_list = config_dict.get("objects", [])
-        for obj_dict in objects_list:
-            config.objects.append(
-                SqlObject(
-                    name=obj_dict["name"],
-                    object=obj_dict["object"],
-                    filter=obj_dict.get("filter", ""),
-                )
-            )
-
-        return config
+from utils.rich_utils import COLORS, align_columns, console, create_table
 
 
 def export_to_parquet(
@@ -82,18 +23,17 @@ def export_to_parquet(
 ) -> ExportResult:
     result = ExportResult(friendly_name=sql_object.name, full_object_name=sql_object.object)
 
-    start_time = time.time()
+    query = f"SELECT * FROM [{sql_object.schema}].[{sql_object.object_name}]"
+    if sql_object.filter:
+        query += f" WHERE {sql_object.filter}"
+
     file_path = output_dir / f"{sql_object.name}.parquet"
+    start_time = time.time()
+    is_verbose = logging_level in ["verbose", "debug"]
 
     try:
-        # Build the SQL query with filter if provided
-        query = f"SELECT * FROM [{sql_object.schema}].[{sql_object.object_name}]"
-        if sql_object.filter:
-            query += f" WHERE {sql_object.filter}"
-
-        if logging_level in ["verbose", "debug"]:
-            print(f"Executing query: {query}")
-
+        # Execute query and process results in chunks
+        row_count = 0
         for i, df_chunk in enumerate(pd.read_sql_query(query, engine, chunksize=batch_size)):
             if i == 0:
                 # First chunk, create the file
@@ -102,26 +42,31 @@ def export_to_parquet(
                 # Append to existing file
                 df_chunk.to_parquet(file_path, engine="pyarrow", index=False, append=True)
 
-            result.rows_processed += len(df_chunk)
+            row_count += len(df_chunk)
 
             if logging_level == "debug":
-                print(f"Processed chunk {i + 1} with {len(df_chunk)} rows")
+                console.print(f"Processed chunk {i + 1} with {len(df_chunk)} rows")
 
-        end_time = time.time()
-        result.elapsed_time = end_time - start_time
+        result.status = "Success"
+        result.rows_processed = row_count
         result.file_path = str(file_path)
 
-        if logging_level in ["verbose", "debug"]:
-            print(f"Successfully exported [{sql_object.object}] to {file_path}")
-            print(f"Rows processed: {result.rows_processed}")
-            print(f"Execution time: {result.elapsed_time:.2f} seconds")
+        if is_verbose:
+            console.print(f"Successfully exported: {file_path}")
+            console.print(f"Rows processed: {row_count:,}")
 
     except Exception as e:
         result.status = "Error"
         result.error_message = str(e)
 
-        if logging_level in ["verbose", "debug"]:
-            print(f"Error exporting [{sql_object.object}]: {e}")
+        if is_verbose:
+            console.print(f"[red]Error exporting[/] [blue]{sql_object.object}[/]: {e}")
+
+    finally:
+        result.elapsed_time = time.time() - start_time
+
+        if is_verbose:
+            console.print(f"Execution time: {result.elapsed_time:.2f} seconds")
 
     return result
 
@@ -129,40 +74,40 @@ def export_to_parquet(
 def print_results_summary(results: List[ExportResult], logging_level: str) -> None:
     """Print a summary of export results based on the logging level."""
     if logging_level in ["summary", "verbose", "debug"]:
-        table = PrettyTable()
-        table.field_names = ["Friendly Name", "SQL Object", "Status", "Rows", "Time (s)", "File"]
+        table = create_table(
+            columns=["Friendly Name", "SQL Object", "Status", "Rows", "Time (s)", "File"]
+        )
 
-        for field in table.field_names:
-            table.align[field] = "l"
-
-        table.max_width["Friendly Name"] = 30
-        table.max_width["SQL Object"] = 40
-        table.max_width["File"] = 30
+        align_columns(table, {"Rows": "right", "Time (s)": "right"})
 
         for result in results:
+            status_style = "green" if result.status == "Success" else "red"
+            status_text = f"[{status_style}]{result.status}[/]"
+
+            file_name = os.path.basename(result.file_path) if result.file_path else "N/A"
+            time_text = f"{result.elapsed_time:.2f}" if result.elapsed_time else "N/A"
+
             table.add_row(
-                [
-                    result.friendly_name,
-                    result.full_object_name,
-                    result.status,
-                    result.rows_processed,
-                    f"{result.elapsed_time:.2f}" if result.elapsed_time else "N/A",
-                    os.path.basename(result.file_path) if result.file_path else "N/A",
-                ]
+                result.friendly_name,
+                result.full_object_name,
+                status_text,
+                f"{result.rows_processed:,}",
+                time_text,
+                file_name,
             )
 
-        print("\nExport Summary:")
-        print(table)
+        console.print()
+        console.print(table)
 
         # Print error details for failed exports
         if any(r.status == "Error" for r in results):
-            print("\nErrors:")
+            console.print("\n[bold red]Errors:[/]")
             for result in results:
                 if result.status == "Error":
                     name = result.friendly_name
                     obj = result.full_object_name
                     error = result.error_message
-                    print(f"[{name}] {obj}: {error}")
+                    console.print(f"[bold]{name}[/] {obj}: [red]{error}[/]")
 
 
 def main() -> None:
@@ -184,46 +129,89 @@ def main() -> None:
     connection = get_connection("SQL_TO_PARQUET_DB")
     engine = connection.get_sqlalchemy_engine()
 
-    print(f"Executing script on server: [{connection.server}] in database: [{connection.database}]")
-    print(f"Output directory: {data_dir_path}")
-    print(f"Using logging_level: {export_config.logging_level}\n")
+    console.print()
+    console.rule("[bold cyan]SQL to Parquet Export Tool[/]")
+    console.print("[italic]Exporting SQL data to Parquet files[/]", justify="center")
+    console.print()
+
+    console.print(f"Server: [green]{connection.server}[/]")
+    console.print(f"Database: [green]{connection.database}[/]")
+    console.print(f"Output directory: [blue]{data_dir_path}[/]")
+    console.print(f"Logging level: [blue]{export_config.logging_level}[/]")
+    console.print()
 
     try:
         if not export_config.objects:
-            print("No objects defined in the configuration")
+            console.print("[bold red]No objects defined in the configuration[/]")
             return
 
-        print(f"Found {len(export_config.objects)} objects to process")
+        results = []
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold magenta]{task.description}"),
+            console=console,
+        ) as progress:
+            task = progress.add_task("• Initializing export process...", total=None)
+            progress.update(task, description="• Ready to begin export", completed=True)
 
-        # Process each object
-        results: List[ExportResult] = []
-        for sql_object in export_config.objects:
-            if export_config.logging_level in ["verbose", "debug"]:
-                print(f"\nProcessing object: [{sql_object.object}] as [{sql_object.name}]")
+            console.print(f"Found [bold]{len(export_config.objects)}[/] objects to process")
 
-            result = export_to_parquet(
-                engine=engine,
-                sql_object=sql_object,
-                output_dir=data_dir_path,
-                batch_size=export_config.batch_size,
-                logging_level=export_config.logging_level,
-            )
+            # Process each object
+            for i, sql_object in enumerate(export_config.objects):
+                color = COLORS[i % len(COLORS)]
 
-            results.append(result)
+                task = progress.add_task(
+                    f"• Processing [{color}]{sql_object.name}[/]...", total=None
+                )
+
+                if export_config.logging_level in ["verbose", "debug"]:
+                    console.print(f"\nName: [{color}]{sql_object.name}[/]")
+                    console.print(f"SQL Object: [{color}]{sql_object.object}[/]")
+
+                result = export_to_parquet(
+                    engine=engine,
+                    sql_object=sql_object,
+                    output_dir=data_dir_path,
+                    batch_size=export_config.batch_size,
+                    logging_level=export_config.logging_level,
+                )
+                results.append(result)
+
+                if export_config.logging_level in ["verbose", "debug"]:
+                    progress.start()
+
+                # Update progress display
+                status = "[green]✓ Done[/]" if result.status == "Success" else "[red]✗ Failed[/]"
+                progress.update(
+                    task,
+                    description=f"• {sql_object.name}: {status} ({result.rows_processed:,} rows)",
+                    completed=True,
+                )
 
         print_results_summary(results, export_config.logging_level)
+
+        if export_config.logging_level not in ["verbose", "debug"]:
+            console.print(" " * 100, end="\r")
 
         # Print overall statistics
         successful = sum(1 for r in results if r.status == "Success")
         failed = len(results) - successful
         total_rows = sum(r.rows_processed for r in results)
 
-        print(
-            f"\nExported {successful} objects ({failed} failed) with a total of {total_rows} rows"
-        )
+        console.print()
+        if failed == 0:
+            console.print(f"[bold green]✓ Successfully exported all {successful} objects[/]")
+            console.print(f"[bold green]Total rows: {total_rows:,}[/]")
+        else:
+            console.print(f"[bold yellow]⚠ Exported {successful} objects ({failed} failed)[/]")
+            console.print(f"[bold yellow]Total rows: {total_rows:,}[/]")
+
+        console.print()
+        console.rule("[bold cyan]Export Complete[/]")
+        console.print()
 
     except pyodbc.Error as ex:
-        print(f"Database error: {ex}")
+        console.print(f"[bold red]Database error:[/] {ex}")
 
     finally:
         pass
