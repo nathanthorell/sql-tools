@@ -7,15 +7,13 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.text import Text
 
-from object_compare.compare_utils import (
+from object_compare import (
     ChecksumData,
     ComparisonResult,
+    fetch_definitions,
     print_comparison_result,
 )
-from object_compare.fetch_objects import (
-    fetch_definitions,
-)
-from utils import Connection, get_config, get_connection
+from utils import Connection, get_config, get_connection, modify_connection_for_database
 from utils.rich_utils import console
 
 
@@ -93,6 +91,7 @@ def main() -> None:
     load_dotenv()
     object_compare_config = get_config("object_compare")
     schema = object_compare_config["schema"]
+    database = object_compare_config.get("database", None)
     environments = object_compare_config.get("environments", {})
     object_types = object_compare_config.get(
         "object_types", ["stored_proc", "view", "function"]
@@ -104,6 +103,10 @@ def main() -> None:
     for env_name, env_var in environments.items():
         try:
             connections[env_name] = get_connection(env_var)
+            if database is not None:
+                connections[env_name] = modify_connection_for_database(
+                    connections[env_name], database_name=database
+                )
             conn_str = escape(str(connections[env_name]))
             connection_info.append(f"[green]{env_name}[/]: {conn_str}")
         except ValueError as e:

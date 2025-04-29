@@ -5,6 +5,7 @@ logging_level = "summary" # "verbose", "errors_only", or "summary"
 ######################################################################################
 [object_compare]
 schema = "report"
+database = "ExampleDb" # Optional, switches from whatever db is in conn to this db
 object_types = [
     "stored_proc",
     "view",
@@ -83,6 +84,10 @@ databases.PROD = ["ProdDB1", "ProdDB2", "ProdDB3"]
 
 ######################################################################################
 [data_compare]
+output = "right_only"  # "left_only" or "right_only"
+output_file_path = "./output/"
+output_format = "csv"  # "csv" or "json"
+timestamp_file = false  # Whether to include timestamp in filename
 
 [[data_compare.compare_list]]
 name = "Example Comparison"
