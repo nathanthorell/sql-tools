@@ -16,6 +16,7 @@ build/
 *.spec
 data/
 output/
+temp/
 
 # Config
 config.toml

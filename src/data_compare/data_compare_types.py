@@ -70,6 +70,24 @@ class ComparisonResult:
         right_cols_lower = {col.lower() for col in right_df.columns}
         return left_cols_lower == right_cols_lower
 
+    def _compare_columns(
+        self, left_df: pd.DataFrame, right_df: pd.DataFrame
+    ) -> Dict[str, List[str]]:
+        """Compare columns between dataframes and categorize them"""
+        left_cols_lower = {col.lower(): col for col in left_df.columns}
+        right_cols_lower = {col.lower(): col for col in right_df.columns}
+
+        left_only_lower = set(left_cols_lower.keys()) - set(right_cols_lower.keys())
+        right_only_lower = set(right_cols_lower.keys()) - set(left_cols_lower.keys())
+        matching_lower = set(left_cols_lower.keys()) & set(right_cols_lower.keys())
+
+        # Return original case column names
+        return {
+            "left_only": sorted([left_cols_lower[col] for col in left_only_lower]),
+            "right_only": sorted([right_cols_lower[col] for col in right_only_lower]),
+            "matching": sorted([left_cols_lower[col] for col in matching_lower]),
+        }
+
     def _normalize_column_names(
         self, left_df: pd.DataFrame, right_df: pd.DataFrame
     ) -> pd.DataFrame:
@@ -207,9 +225,39 @@ class ComparisonResult:
 
         if not self.is_equal:
             if not self.columns_match:
+                column_comparison = self._compare_columns(self.left.results, self.right.results)
+
                 console.print("[bold red]Column mismatch:[/]")
-                console.print(f"Left columns: {sorted(self.left.results.columns.tolist())}")
-                console.print(f"Right columns: {sorted(self.right.results.columns.tolist())}")
+
+                # Create a table to display column comparison
+                column_table = Table(show_header=True)
+                column_table.add_column("Category", style="bold")
+                column_table.add_column("Count", justify="right")
+                column_table.add_column("Columns")
+
+                left_only = column_comparison["left_only"]
+                right_only = column_comparison["right_only"]
+                matching = column_comparison["matching"]
+
+                column_table.add_row(
+                    "[bold red]Left-only[/]",
+                    str(len(left_only)),
+                    ", ".join(left_only) if left_only else "[dim]None[/]",
+                )
+
+                column_table.add_row(
+                    "[bold red]Right-only[/]",
+                    str(len(right_only)),
+                    ", ".join(right_only) if right_only else "[dim]None[/]",
+                )
+
+                column_table.add_row(
+                    "[bold green]Matching[/]",
+                    str(len(matching)),
+                    ", ".join(matching) if matching else "[dim]None[/]",
+                )
+
+                console.print(column_table)
             else:
                 # Show difference counts
                 console.print("[bold]Row Differences:[/]")
