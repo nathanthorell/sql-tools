@@ -215,5 +215,143 @@ def get_query_for_object_type(schema_name: str, object_type: str) -> str:
             GROUP BY i.object_id, i.name, i.is_unique, i.type, i.filter_definition
             """
 
+        case "type":
+            return f"""
+            SELECT
+                tt.name AS type_name,
+                CASE
+                    WHEN tt.is_table_type = 1 THEN
+                        -- For table types, get column definitions
+                        (SELECT
+                            'TABLE_TYPE: ' +
+                            STRING_AGG(
+                                CONCAT(
+                                    c.name, ' ',
+                                    UPPER(ty.name),
+                                    CASE
+                                        WHEN ty.name IN ('varchar', 'nvarchar', 'char', 'nchar')
+                                        THEN CONCAT('(',
+                                            CASE WHEN c.max_length = -1
+                                                THEN 'MAX'
+                                                ELSE CAST(
+                                                    CASE WHEN ty.name LIKE 'n%'
+                                                        THEN c.max_length/2
+                                                        ELSE c.max_length
+                                                    END AS VARCHAR
+                                                )
+                                            END, ')'
+                                        )
+                                        WHEN ty.name IN ('decimal', 'numeric')
+                                        THEN CONCAT('(', c.precision, ',', c.scale, ')')
+                                        ELSE ''
+                                    END,
+                                    CASE WHEN c.is_nullable = 1 THEN ' NULL' ELSE ' NOT NULL' END
+                                ),
+                                ', '
+                            )
+                        FROM sys.columns c
+                        INNER JOIN sys.table_types tab ON c.object_id = tab.type_table_object_id
+                        INNER JOIN sys.types ty ON c.user_type_id = ty.user_type_id
+                        WHERE tab.user_type_id = tt.user_type_id
+                        )
+                    ELSE
+                        -- For scalar types
+                        CONCAT(
+                            'SCALAR_TYPE: ',
+                            'BASE_TYPE=', bt.name,
+                            CASE
+                                WHEN bt.name IN (
+                                    'varchar', 'nvarchar', 'char', 'nchar', 'binary', 'varbinary'
+                                )
+                                THEN CONCAT('(',
+                                    CASE WHEN tt.max_length = -1
+                                        THEN 'MAX'
+                                        ELSE CAST(
+                                            CASE WHEN bt.name LIKE 'n%'
+                                                THEN tt.max_length/2
+                                                ELSE tt.max_length
+                                            END AS VARCHAR
+                                        )
+                                    END, ')'
+                                )
+                                WHEN bt.name IN ('decimal', 'numeric')
+                                THEN CONCAT('(', tt.precision, ',', tt.scale, ')')
+                                ELSE ''
+                            END,
+                            CASE WHEN tt.is_nullable = 1 THEN ', NULLABLE' ELSE ', NOT NULL' END
+                        )
+                END AS type_definition
+            FROM sys.types tt
+            INNER JOIN sys.schemas s ON tt.schema_id = s.schema_id
+            LEFT JOIN sys.types bt ON tt.system_type_id = bt.user_type_id
+            WHERE
+                s.name = '{schema_name}'
+                AND tt.is_user_defined = 1
+            """
+
+        case "external_table":
+            return f"""
+            SELECT
+                et.name AS external_table_name,
+                CONCAT(
+                    'DATA_SOURCE=', ds.name,
+                    ', LOCATION=', et.location,
+                    CASE WHEN ff.name IS NOT NULL
+                        THEN CONCAT(', FILE_FORMAT=', ff.name)
+                        ELSE ''
+                    END,
+                    CASE WHEN et.reject_type IS NOT NULL
+                        THEN CONCAT(', REJECT_TYPE=', et.reject_type)
+                        ELSE ''
+                    END,
+                    CASE WHEN et.reject_value IS NOT NULL
+                        THEN CONCAT(', REJECT_VALUE=', CAST(et.reject_value AS VARCHAR))
+                        ELSE ''
+                    END,
+                    CASE WHEN et.reject_sample_value IS NOT NULL
+                        THEN CONCAT(
+                            ', REJECT_SAMPLE_VALUE=',
+                            CAST(et.reject_sample_value AS VARCHAR)
+                        )
+                        ELSE ''
+                    END,
+                    ' | COLUMNS=',
+                    STRING_AGG(
+                        CONCAT(
+                            c.name, ' ',
+                            UPPER(ty.name),
+                            CASE
+                                WHEN ty.name IN ('varchar', 'nvarchar', 'char', 'nchar')
+                                THEN CONCAT('(',
+                                    CASE WHEN c.max_length = -1
+                                        THEN 'MAX'
+                                        ELSE CAST(
+                                            CASE WHEN ty.name LIKE 'n%'
+                                                THEN c.max_length/2
+                                                ELSE c.max_length
+                                            END AS VARCHAR
+                                        )
+                                    END, ')'
+                                )
+                                WHEN ty.name IN ('decimal', 'numeric')
+                                THEN CONCAT('(', c.precision, ',', c.scale, ')')
+                                ELSE ''
+                            END,
+                            CASE WHEN c.is_nullable = 1 THEN ' NULL' ELSE ' NOT NULL' END
+                        ),
+                        ','
+                    ) WITHIN GROUP (ORDER BY c.column_id)
+                ) AS definition
+            FROM sys.external_tables et
+            INNER JOIN sys.schemas s ON et.schema_id = s.schema_id
+            INNER JOIN sys.external_data_sources ds ON et.data_source_id = ds.data_source_id
+            LEFT JOIN sys.external_file_formats ff ON et.file_format_id = ff.file_format_id
+            INNER JOIN sys.columns c ON et.object_id = c.object_id
+            INNER JOIN sys.types ty ON c.user_type_id = ty.user_type_id
+            WHERE s.name = '{schema_name}'
+            GROUP BY et.name, ds.name, et.location, ff.name,
+                     et.reject_type, et.reject_value, et.reject_sample_value
+            """
+
         case _:
             return ""

@@ -151,6 +151,8 @@ def main() -> None:
         "trigger": "trigger",
         "sequence": "sequence",
         "index": "index",
+        "type": "type",
+        "external_table": "external table",
     }
 
     for obj_type in object_types:
