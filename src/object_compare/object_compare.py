@@ -153,6 +153,7 @@ def main() -> None:
         "index": "index",
         "type": "type",
         "external_table": "external table",
+        "foreign_key": "foreign key",
     }
 
     for obj_type in object_types:

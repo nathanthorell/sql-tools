@@ -16,6 +16,7 @@ object_types = [
     "index",
     "type",
     "external_table",
+    "foreign_key",
 ]
 
 [object_compare.environments]

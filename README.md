@@ -4,7 +4,7 @@ A collection of utility tools for working with various dialects of SQL databases
 
 ## Features
 
-- **Object Comparison Tool** (`object_compare`): Compare definitions of stored procedures, views, functions, tables, triggers, and sequences across different environments (DEV, QA, UAT, PROD)
+- **Object Comparison Tool** (`object_compare`): Compare definitions of stored procedures, views, functions, tables, triggers, sequences, indexes, types, external tables, and foreign keys across different environments (DEV, QA, UAT, PROD)
 
   - Identify exclusive objects that exist in only one environment
   - Check for definition differences in objects across environments
