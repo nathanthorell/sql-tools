@@ -86,10 +86,11 @@ databases.PROD = ["ProdDB1", "ProdDB2", "ProdDB3"]
 
 ######################################################################################
 [data_compare]
-output = "right_only"  # "left_only" or "right_only"
+output_type = "right_only"  # "left_only", "right_only", or "both"
 output_file_path = "./output/"
-output_format = "csv"  # "csv" or "json"
+output_format = "csv"  # "csv" or "json" or "sql"
 timestamp_file = false  # Whether to include timestamp in filename
+max_sql_in_values = 10000
 
 [[data_compare.compare_list]]
 name = "Example Comparison"
@@ -97,9 +98,26 @@ left_connection = "DATA_COMPARE_LEFT_DB"
 right_connection = "DATA_COMPARE_RIGHT_DB"
 left_db_type = "mssql"
 right_db_type = "pg"
+output_table_name = "my_table"  # Optional but useful when outputting to sql format
 left_query = """
 SELECT 1 AS column_one, 2 AS column_two
 """
 right_query = """
 SELECT 1 AS column_one, 2 AS column_two
+"""
+
+######################################################################################
+[data_cleanup]
+conn = "DATA_CLEANUP_DB"
+database = "YourDatabaseName"
+schema = "dbo"
+table = "YourTableName"
+cleanup_mode = "summary" # "summary" or "execute"
+batch_size = 1000 # Number of records to process in each batch
+batch_threshold = 3000 # Minimum records before batching is applied
+
+# SQL query that returns the primary key values to remove
+query_of_data_to_remove = """
+SELECT id FROM dbo.YourTableName
+WHERE DeleteFlag = 1
 """

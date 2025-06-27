@@ -1,24 +1,23 @@
 [project]
 name = "sql-tools"
-version = "0.0.2"
+version = "0.0.3"
 description = "A collection of utility tools for working with various dialects of SQL databases."
 license = { file = "LICENSE" }
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "pyodbc",
+    "psycopg2-binary",
     "python-dotenv",
-    "prettytable",
     "rich",
     "toml",
     "sqlalchemy",
     "pandas",
     "pyarrow",
-    "psycopg2-binary",
 ]
 
 [project.optional-dependencies]
-dev = ["ruff", "mypy"]
+dev = ["ruff", "mypy", "types-toml", "pandas-stubs", "types-psycopg2"]
 
 [project.scripts]
 object_compare = "object_compare.object_compare:main"
@@ -27,6 +26,7 @@ view_tester = "view_tester.view_tester:main"
 sql_to_parquet = "sql_to_parquet.sql_to_parquet:main"
 schema_size = "schema_size.schema_size:main"
 data_compare = "data_compare.data_compare:main"
+data_cleanup = "data_cleanup.data_cleanup:main"
 
 [build-system]
 requires = ["setuptools"]
@@ -65,6 +65,7 @@ warn_no_return = true
 warn_unreachable = true
 explicit_package_bases = true
 namespace_packages = true
+exclude = ["temp/.*"]
 
 [[tool.mypy.overrides]]
 module = ["pyodbc"]

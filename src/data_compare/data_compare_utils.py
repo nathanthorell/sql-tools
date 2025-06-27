@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional, Tuple
 
+import numpy as np
 import pandas as pd
 from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
 
@@ -84,16 +85,19 @@ def run_comparisons(config: ComparisonConfig) -> bool:
     console.print()
 
     # Get output settings
-    output_type = config.config.get("output", None)
+    output_type = config.config.get("output_type", None)
     output_dir = config.config.get("output_file_path", "./output/")
     output_format = config.config.get("output_format", "csv")
     timestamp_file = config.config.get("timestamp_file", False)
+    max_sql_in_values = config.config.get("max_sql_in_values", 1000)
 
     for i, comparison in enumerate(config.comparisons):
         name = comparison.name
         color = COLORS[i % len(COLORS)]
         console.print()
         console.rule(f"[bold {color}]{name}[/]")
+
+        output_table_name = comparison.table_name
 
         left_conn = comparison.left_connection
         right_conn = comparison.right_connection
@@ -116,20 +120,26 @@ def run_comparisons(config: ComparisonConfig) -> bool:
                     case "left_only" | "both":
                         if not result.left_only.empty:
                             generate_output_file(
-                                f"{name}_left_only",
-                                result.left_only,
-                                output_dir,
-                                output_format,
-                                timestamp_file,
+                                name=name,
+                                output_type=output_type,
+                                dataset=result.left_only,
+                                output_dir=output_dir,
+                                table_name=output_table_name,
+                                format=output_format,
+                                timestamp_file=timestamp_file,
+                                max_sql_in_values=max_sql_in_values,
                             )
                     case "right_only" | "both":
                         if not result.right_only.empty:
                             generate_output_file(
-                                f"{name}_right_only",
-                                result.right_only,
-                                output_dir,
-                                output_format,
-                                timestamp_file,
+                                name=name,
+                                output_type=output_type,
+                                dataset=result.right_only,
+                                output_dir=output_dir,
+                                table_name=output_table_name,
+                                format=output_format,
+                                timestamp_file=timestamp_file,
+                                max_sql_in_values=max_sql_in_values,
                             )
                     case _:
                         console.print(f"[yellow]Unknown output type: {output_type}[/]")
@@ -164,12 +174,74 @@ def load_sql_file(file_path: str) -> str:
         return f.read()
 
 
+def format_value_for_sql_in(value: Any) -> str:
+    """Format a single value for use in SQL IN statement"""
+    if pd.isna(value) or value is None:
+        return "NULL"
+    elif isinstance(value, str):
+        # Escape single quotes by doubling them
+        escaped_value = value.replace("'", "''")
+        return f"'{escaped_value}'"
+    elif isinstance(value, (bool, np.bool_)):
+        return "1" if value else "0"
+    elif isinstance(value, (int, float, np.integer, np.floating)):
+        # Handle all numeric types (including numpy types)
+        return str(value)
+    else:
+        # For other types (datetime, etc.), convert to string and quote
+        escaped_value = str(value).replace("'", "''")
+        return f"'{escaped_value}'"
+
+
+def generate_sql_statement(
+    dataset: pd.DataFrame, table_name: str, max_values: Optional[int] = None
+) -> str:
+    """Generate a complete SQL SELECT statement from a dataset"""
+    if dataset.empty:
+        return "-- No data to generate SELECT statement"
+
+    # Get unique values from the first column (typically the key column)
+    column_name = dataset.columns[0]
+    values = dataset.iloc[:, 0].unique()
+
+    # Limit the number of values if max_values is specified
+    if max_values is not None and len(values) > max_values:
+        values = values[:max_values]
+        console.print(
+            f"[yellow]Warning: Truncated to {max_values} values for SQL SELECT statement[/]"
+        )
+
+    # Format values for SQL
+    formatted_values = [format_value_for_sql_in(val) for val in values]
+
+    # Build the WHERE clause
+    if len(formatted_values) == 1:
+        where_clause = f"WHERE {column_name} = {formatted_values[0]}"
+    else:
+        if len(formatted_values) <= 10:
+            # For small lists, put all on one line
+            in_clause = f"IN ({', '.join(formatted_values)})"
+        else:
+            # For larger lists, format with line breaks for readability
+            values_str = ",\n        ".join(formatted_values)
+            in_clause = f"IN (\n        {values_str}\n    )"
+        where_clause = f"WHERE {column_name} {in_clause}"
+
+    # Build the complete SELECT statement
+    select_statement = f"SELECT *\nFROM [{table_name}]\n{where_clause};"
+
+    return select_statement
+
+
 def generate_output_file(
     name: str,
+    output_type: str,
     dataset: pd.DataFrame,
     output_dir: str,
+    table_name: str,
     format: str = "csv",
     timestamp_file: bool = False,
+    max_sql_in_values: Optional[int] = None,
 ) -> str:
     """Generate an output file from a dataset."""
     output_path = Path(output_dir)
@@ -183,9 +255,9 @@ def generate_output_file(
     # Determine filename based on timestamp preference
     if timestamp_file:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{name}_{timestamp}"
+        filename = f"{name}_{output_type}_{timestamp}"
     else:
-        filename = clean_name
+        filename = f"{clean_name}_{output_type}"
 
     file_path = Path()
     if format.lower() == "csv":
@@ -194,6 +266,23 @@ def generate_output_file(
     elif format.lower() == "json":
         file_path = output_path / f"{filename}.json"
         dataset.to_json(file_path, orient="records", lines=True)
+    elif format.lower() == "sql":
+        file_path = output_path / f"{filename}.sql"
+        sql_statement = generate_sql_statement(
+            dataset, table_name=table_name, max_values=max_sql_in_values
+        )
+        unique_count = len(dataset.iloc[:, 0].unique()) if not dataset.empty else 0
+        sql_content = f"""-- SQL SELECT Statement for "{name}"
+-- Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+-- Total records: {len(dataset)}
+-- Unique values: {unique_count}
+-- Key column: {dataset.columns[0] if not dataset.empty else "N/A"}
+-- Usage: Copy this query and modify the table name as needed
+
+{sql_statement}
+"""
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(sql_content)
     else:
         raise ValueError(f"Unsupported format: {format}")
 

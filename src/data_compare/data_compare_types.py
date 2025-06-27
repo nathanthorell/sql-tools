@@ -325,6 +325,7 @@ class ComparisonItem:
     right_connection: Connection
     left_query: str
     right_query: str
+    table_name: str
     left_db_type: str = "mssql"
     right_db_type: str = "mssql"
 
@@ -385,6 +386,7 @@ class ComparisonConfig:
                 right_query=right_query,
                 left_db_type=item.get("left_db_type", "mssql"),
                 right_db_type=item.get("right_db_type", "mssql"),
+                table_name=item.get("table_name", "table_name_not_provided"),
             )
             comparisons.append(comparison)
 
