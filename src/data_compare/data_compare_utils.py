@@ -75,6 +75,69 @@ def compare_sql(
     return comparison
 
 
+def handle_output_files(
+    result: ComparisonResult,
+    name: str,
+    output_type: str,
+    output_dir: str,
+    output_table_name: str,
+    output_format: str,
+    timestamp_file: bool,
+    max_sql_in_values: int,
+) -> None:
+    """Handle output file generation based on output_type configuration"""
+    match output_type:
+        case "left_only":
+            if not result.left_only.empty:
+                generate_output_file(
+                    name=name,
+                    output_type="left_only",
+                    dataset=result.left_only,
+                    output_dir=output_dir,
+                    table_name=output_table_name,
+                    format=output_format,
+                    timestamp_file=timestamp_file,
+                    max_sql_in_values=max_sql_in_values,
+                )
+        case "right_only":
+            if not result.right_only.empty:
+                generate_output_file(
+                    name=name,
+                    output_type="right_only",
+                    dataset=result.right_only,
+                    output_dir=output_dir,
+                    table_name=output_table_name,
+                    format=output_format,
+                    timestamp_file=timestamp_file,
+                    max_sql_in_values=max_sql_in_values,
+                )
+        case "both":
+            if not result.left_only.empty:
+                generate_output_file(
+                    name=name,
+                    output_type="left_only",
+                    dataset=result.left_only,
+                    output_dir=output_dir,
+                    table_name=output_table_name,
+                    format=output_format,
+                    timestamp_file=timestamp_file,
+                    max_sql_in_values=max_sql_in_values,
+                )
+            if not result.right_only.empty:
+                generate_output_file(
+                    name=name,
+                    output_type="right_only",
+                    dataset=result.right_only,
+                    output_dir=output_dir,
+                    table_name=output_table_name,
+                    format=output_format,
+                    timestamp_file=timestamp_file,
+                    max_sql_in_values=max_sql_in_values,
+                )
+        case _:
+            console.print(f"[yellow]Unknown output type: {output_type}[/]")
+
+
 def run_comparisons(config: ComparisonConfig) -> bool:
     """Run all SQL comparisons from config"""
     success = True
@@ -116,33 +179,16 @@ def run_comparisons(config: ComparisonConfig) -> bool:
 
             # Handle output file generation if configured
             if output_type and output_dir:
-                match output_type:
-                    case "left_only" | "both":
-                        if not result.left_only.empty:
-                            generate_output_file(
-                                name=name,
-                                output_type=output_type,
-                                dataset=result.left_only,
-                                output_dir=output_dir,
-                                table_name=output_table_name,
-                                format=output_format,
-                                timestamp_file=timestamp_file,
-                                max_sql_in_values=max_sql_in_values,
-                            )
-                    case "right_only" | "both":
-                        if not result.right_only.empty:
-                            generate_output_file(
-                                name=name,
-                                output_type=output_type,
-                                dataset=result.right_only,
-                                output_dir=output_dir,
-                                table_name=output_table_name,
-                                format=output_format,
-                                timestamp_file=timestamp_file,
-                                max_sql_in_values=max_sql_in_values,
-                            )
-                    case _:
-                        console.print(f"[yellow]Unknown output type: {output_type}[/]")
+                handle_output_files(
+                    result=result,
+                    name=name,
+                    output_type=output_type,
+                    output_dir=output_dir,
+                    output_table_name=output_table_name,
+                    output_format=output_format,
+                    timestamp_file=timestamp_file,
+                    max_sql_in_values=max_sql_in_values,
+                )
 
             if not result.is_equal:
                 success = False

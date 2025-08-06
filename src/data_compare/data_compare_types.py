@@ -150,13 +150,53 @@ class ComparisonResult:
         left_sorted = left_normalized[sorted(left_normalized.columns)]
         right_sorted = right_normalized[sorted(right_normalized.columns)]
 
-        # Perform the merge to identify differences
-        merged = left_sorted.merge(right_sorted, how="outer", indicator=True)
+        try:
+            # Perform the merge to identify differences
+            merged = left_sorted.merge(right_sorted, how="outer", indicator=True)
 
-        # Extract the results
-        self.left_only = merged[merged["_merge"] == "left_only"].drop("_merge", axis=1)
-        self.right_only = merged[merged["_merge"] == "right_only"].drop("_merge", axis=1)
-        self.common_rows = merged[merged["_merge"] == "both"].drop("_merge", axis=1)
+            # Extract the results
+            self.left_only = merged[merged["_merge"] == "left_only"].drop("_merge", axis=1)
+            self.right_only = merged[merged["_merge"] == "right_only"].drop("_merge", axis=1)
+            self.common_rows = merged[merged["_merge"] == "both"].drop("_merge", axis=1)
+
+        except Exception as e:
+            console.print(f"[dim]Merge operation failed: {e}[/]")
+            console.print("[dim]Falling back to alternative comparison method...[/]")
+
+            # Alternative approach: use set-like operations with string representations
+            # Convert rows to hashable strings for set operations
+            left_strings = set(left_sorted.apply(lambda x: "|".join(x.astype(str)), axis=1))
+            right_strings = set(right_sorted.apply(lambda x: "|".join(x.astype(str)), axis=1))
+
+            # Find differences using set operations
+            left_only_strings = left_strings - right_strings
+            right_only_strings = right_strings - left_strings
+            common_strings = left_strings & right_strings
+
+            # Convert back to DataFrames by filtering original data
+            if left_only_strings:
+                left_mask = left_sorted.apply(lambda x: "|".join(x.astype(str)), axis=1).isin(
+                    left_only_strings
+                )
+                self.left_only = left_sorted[left_mask].drop_duplicates()
+            else:
+                self.left_only = pd.DataFrame(columns=left_sorted.columns)
+
+            if right_only_strings:
+                right_mask = right_sorted.apply(lambda x: "|".join(x.astype(str)), axis=1).isin(
+                    right_only_strings
+                )
+                self.right_only = right_sorted[right_mask].drop_duplicates()
+            else:
+                self.right_only = pd.DataFrame(columns=right_sorted.columns)
+
+            if common_strings:
+                common_mask = left_sorted.apply(lambda x: "|".join(x.astype(str)), axis=1).isin(
+                    common_strings
+                )
+                self.common_rows = left_sorted[common_mask].drop_duplicates()
+            else:
+                self.common_rows = pd.DataFrame(columns=left_sorted.columns)
 
         # Sets is_equal if we have no differences (both sets match entirely)
         left_only_count = len(self.left_only)
