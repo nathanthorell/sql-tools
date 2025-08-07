@@ -22,6 +22,7 @@ def compare_definitions(
     schema_name: str,
     object_type: str,
     display_name: str,
+    db_type: str = "mssql",
 ) -> None:
     object_checksums = {}
     all_object_names: Set[str] = set()
@@ -35,7 +36,7 @@ def compare_definitions(
 
         # Fetch objects and calculate checksums for each environment
         for env, connection in connections.items():
-            objects = fetch_definitions(connection, schema_name, object_type)
+            objects = fetch_definitions(connection, schema_name, object_type, db_type)
             all_object_names.update(objects.keys())
 
             # Calculate checksums
@@ -92,6 +93,7 @@ def main() -> None:
     object_compare_config = get_config("object_compare")
     schema = object_compare_config["schema"]
     database = object_compare_config.get("database", None)
+    db_type = object_compare_config.get("db_type", "mssql")
     environments = object_compare_config.get("environments", {})
     object_types = object_compare_config.get(
         "object_types", ["stored_proc", "view", "function"]
@@ -160,7 +162,7 @@ def main() -> None:
         if obj_type in display_names:
             display_type = display_names[obj_type]
             console.print(f"\n[bold magenta]⚡ Processing {display_type}s[/]")
-            compare_definitions(connections, schema, obj_type, display_type)
+            compare_definitions(connections, schema, obj_type, display_type, db_type)
             console.print(f"[bold green]✓ {display_type.capitalize()}s comparison complete![/]")
         else:
             console.print(f"[yellow]Warning:[/] Unknown object type '{obj_type}' skipped")
