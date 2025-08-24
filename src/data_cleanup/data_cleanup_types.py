@@ -286,3 +286,97 @@ class CleanupOperation:
     def should_use_batching(self, threshold: int) -> bool:
         """Determine if this operation should use batching based on record count"""
         return threshold > 0 and len(self.ids) >= threshold
+
+
+@dataclass
+class ForeignKeyConstraintInfo:
+    """Information about a foreign key constraint that needs to be disabled/enabled"""
+
+    constraint_name: str
+    parent_schema: str
+    parent_table: str
+    referenced_schema: str
+    referenced_table: str
+
+    @property
+    def parent_table_key(self) -> str:
+        """Get the parent table key in schema.table format"""
+        return f"{self.parent_schema}.{self.parent_table}"
+
+    @property
+    def referenced_table_key(self) -> str:
+        """Get the referenced table key in schema.table format"""
+        return f"{self.referenced_schema}.{self.referenced_table}"
+
+    def generate_disable_sql(self) -> str:
+        """Generate SQL to disable this foreign key constraint"""
+        return (
+            f"ALTER TABLE [{self.parent_schema}].[{self.parent_table}] "
+            f"NOCHECK CONSTRAINT [{self.constraint_name}]"
+        )
+
+    def generate_enable_sql(self) -> str:
+        """Generate SQL to enable and validate this foreign key constraint"""
+        return (
+            f"ALTER TABLE [{self.parent_schema}].[{self.parent_table}] "
+            f"WITH CHECK CHECK CONSTRAINT [{self.constraint_name}]"
+        )
+
+    def generate_validate_sql(self) -> str:
+        """Generate SQL to validate the constraint after re-enabling"""
+        return f"""
+        -- Validate constraint {self.constraint_name}
+        IF EXISTS (
+            SELECT 1 FROM sys.foreign_keys
+            WHERE name = '{self.constraint_name}'
+            AND parent_object_id = OBJECT_ID('[{self.parent_schema}].[{self.parent_table}]')
+            AND is_not_trusted = 1
+        )
+        BEGIN
+            PRINT 'Warning: Constraint {self.constraint_name} is not trusted'
+        END
+        """
+
+
+@dataclass
+class ForeignKeyConstraintManager:
+    """Manages foreign key constraints that need to be disabled/enabled during cleanup"""
+
+    constraints: List[ForeignKeyConstraintInfo] = field(default_factory=list)
+
+    def add_constraint(self, constraint: ForeignKeyConstraintInfo) -> None:
+        """Add a constraint to be managed"""
+        # Avoid duplicates
+        if not any(
+            c.constraint_name == constraint.constraint_name
+            and c.parent_table_key == constraint.parent_table_key
+            for c in self.constraints
+        ):
+            self.constraints.append(constraint)
+
+    def get_constraints_for_table(self, schema: str, table: str) -> List[ForeignKeyConstraintInfo]:
+        """Get all constraints for a specific table"""
+        table_key = f"{schema}.{table}"
+        return [c for c in self.constraints if c.parent_table_key.lower() == table_key.lower()]
+
+    def generate_disable_all_sql(self) -> List[str]:
+        """Generate SQL statements to disable all managed constraints"""
+        return [c.generate_disable_sql() for c in self.constraints]
+
+    def generate_enable_all_sql(self) -> List[str]:
+        """Generate SQL statements to enable all managed constraints"""
+        return [c.generate_enable_sql() for c in self.constraints]
+
+    def generate_validate_all_sql(self) -> List[str]:
+        """Generate SQL statements to validate all managed constraints"""
+        return [c.generate_validate_sql() for c in self.constraints]
+
+    @property
+    def constraint_count(self) -> int:
+        """Get the total number of managed constraints"""
+        return len(self.constraints)
+
+    @property
+    def affected_tables(self) -> Set[str]:
+        """Get the set of tables that have constraints being managed"""
+        return {c.parent_table_key for c in self.constraints}

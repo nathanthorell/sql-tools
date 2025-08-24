@@ -117,6 +117,14 @@ cleanup_mode = "summary" # "summary" or "execute"
 batch_size = 1000 # Number of records to process in each batch
 batch_threshold = 3000 # Minimum records before batching is applied
 
+# Tables to temporarily disable foreign key constraints for during deletion
+# Format: ["schema.table", "schema.table2"]
+# This is optional, but can improve performance for tables with many FKs
+disable_foreign_keys_for_tables = [
+    "dbo.HighVolumeTable",
+    "dbo.AnotherTableWithManyFKs"
+]
+
 # SQL query that returns the primary key values to remove
 query_of_data_to_remove = """
 SELECT id FROM dbo.YourTableName

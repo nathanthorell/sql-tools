@@ -66,7 +66,7 @@ def main() -> None:
                 task, completed=1, description=f"Found {len(hierarchy.relationships)} relationships"
             )
 
-        preload_all_foreign_keys(hierarchy, service)
+        fk_constraint_manager = preload_all_foreign_keys(hierarchy, service, config)
 
         # Get the IDs for cleanup
         with Progress(
@@ -103,7 +103,7 @@ def main() -> None:
         operations = calculate_operations(service, hierarchy, root_table, root_ids, config)
         display_hierarchy_summary(hierarchy, operations, deletion_order)
 
-        script = generate_cleanup_script(operations, deletion_order, config)
+        script = generate_cleanup_script(operations, deletion_order, config, fk_constraint_manager)
         script_dir = Path("./output/scripts")
         script_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

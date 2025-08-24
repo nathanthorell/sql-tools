@@ -10,6 +10,8 @@ from data_cleanup.data_cleanup_config import CleanupConfig
 from data_cleanup.data_cleanup_types import (
     CascadeStats,
     CleanupOperation,
+    ForeignKeyConstraintInfo,
+    ForeignKeyConstraintManager,
     ProcessingQueue,
     RelationshipMap,
     format_id_list_for_sql,
@@ -414,38 +416,32 @@ def _execute_referenced_values_query(service: MetadataService, query: str) -> Li
     return result_values
 
 
-def preload_all_foreign_keys(hierarchy: Hierarchy, service: MetadataService) -> None:
-    """Preload foreign keys for all tables and discover additional relationships"""
-    # Get all tables in the hierarchy
-    all_tables = {hierarchy.root_table}
-    for rel in hierarchy.relationships:
-        all_tables.add(rel.parent_table)
-        all_tables.add(rel.referenced_table)
+def _capture_fk_constraints_for_disabling(
+    all_tables: set[DbTable], config: CleanupConfig, constraint_manager: ForeignKeyConstraintManager
+) -> int:
+    """Capture constraint information for tables that should have FKs disabled"""
+    constraints_captured = 0
 
-    # Load foreign keys for all tables
-    tables_loaded = 0
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[bold magenta]{task.description}"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Loading foreign keys...", total=len(all_tables))
+    # Find all foreign keys that reference the configured tables
+    for table in all_tables:
+        for fk_name, fk in table.foreign_keys.items():
+            # Check if this FK references a table we want to disable constraints for
+            if config.should_disable_foreign_keys(fk.referenced_schema, fk.referenced_table):
+                constraint_info = ForeignKeyConstraintInfo(
+                    constraint_name=fk_name,
+                    parent_schema=fk.parent_schema,
+                    parent_table=fk.parent_table,
+                    referenced_schema=fk.referenced_schema,
+                    referenced_table=fk.referenced_table,
+                )
+                constraint_manager.add_constraint(constraint_info)
+                constraints_captured += 1
 
-        tables_needing_fks = [table for table in all_tables if not table.foreign_keys]
-        for table in tables_needing_fks:
-            if not table.foreign_keys:
-                service.get_foreign_keys(table)
-                tables_loaded += 1
+    return constraints_captured
 
-                progress.update(task, advance=1)
-                # progress.update(
-                #     task, description=f"Loaded FKs for {escape(table.full_table_name())}"
-                # )
-            progress.advance(task)
 
-        progress.update(task, description=f"✓ Loaded foreign keys for {tables_loaded} tables")
-
-    # Discover additional relationships not captured in initial hierarchy
+def _discover_additional_relationships(hierarchy: Hierarchy, all_tables: set[DbTable]) -> None:
+    """Discover additional relationships not captured in initial hierarchy"""
     with Progress(
         SpinnerColumn(),
         TextColumn("[bold magenta]{task.description}"),
@@ -486,18 +482,74 @@ def preload_all_foreign_keys(hierarchy: Hierarchy, service: MetadataService) -> 
                         console.print(f"  Found additional FK: {fk_name}")
             progress.advance(task)
         progress.update(task, description="✓ Relationship discovery complete")
-        # progress.update(
-        #     task, description="Relationship discovery complete", completed=len(all_tables)
-        # )
 
     if additional_relationships:
         hierarchy.relationships.extend(additional_relationships)
         console.print(f"[green]✓ Found {len(additional_relationships)} additional relationships[/]")
 
+
+def preload_all_foreign_keys(
+    hierarchy: Hierarchy, service: MetadataService, config: CleanupConfig
+) -> ForeignKeyConstraintManager:
+    """Preload foreign keys for all tables and discover additional relationships"""
+    constraint_manager = ForeignKeyConstraintManager()
+
+    # Get all tables in the hierarchy
+    all_tables = {hierarchy.root_table}
+    for rel in hierarchy.relationships:
+        all_tables.add(rel.parent_table)
+        all_tables.add(rel.referenced_table)
+
+    # Load foreign keys for all tables
+    tables_loaded = 0
+    constraints_captured = 0
+
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[bold magenta]{task.description}"),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Loading foreign keys...", total=len(all_tables))
+
+        tables_needing_fks = [table for table in all_tables if not table.foreign_keys]
+        for table in tables_needing_fks:
+            if not table.foreign_keys:
+                service.get_foreign_keys(table)
+                tables_loaded += 1
+                progress.update(task, advance=1)
+            progress.advance(task)
+
+        # Capture constraint information for tables configured for FK disabling
+        # This must be done after all FKs are loaded
+        constraints_captured = _capture_fk_constraints_for_disabling(
+            all_tables, config, constraint_manager
+        )
+
+        if constraints_captured > 0:
+            progress.update(
+                task,
+                description=f"✓ Loaded FKs for {tables_loaded} tables, "
+                f"captured {constraints_captured} constraints for disabling",
+            )
+        else:
+            progress.update(task, description=f"✓ Loaded foreign keys for {tables_loaded} tables")
+
+    # Discover additional relationships not captured in initial hierarchy
+    _discover_additional_relationships(hierarchy, all_tables)
+
     hierarchy.rebuild_table_levels()
 
     total_fks = sum(len(table.foreign_keys) for table in all_tables)
     console.print(f"[bold]Total foreign keys loaded: {total_fks}[/]")
+
+    if constraint_manager.constraint_count > 0:
+        count = constraint_manager.constraint_count
+        console.print(f"[bold green]Captured {count} constraints for FK disabling[/]")
+        console.print(
+            f"[dim]Affected tables: {', '.join(sorted(constraint_manager.affected_tables))}[/]"
+        )
+
+    return constraint_manager
 
 
 def _relationship_exists(
@@ -516,10 +568,39 @@ def _relationship_exists(
     )
 
 
+def _add_fk_disable_section(
+    script_lines: List[str], fk_constraint_manager: ForeignKeyConstraintManager
+) -> None:
+    """Add foreign key disable section to script"""
+    if fk_constraint_manager.constraint_count > 0:
+        script_lines.append("-- =================================================================")
+        script_lines.append("-- DISABLE FOREIGN KEY CONSTRAINTS")
+        script_lines.append("-- =================================================================")
+        disable_statements = fk_constraint_manager.generate_disable_all_sql()
+        for stmt in disable_statements:
+            script_lines.append(stmt + ";")
+        script_lines.append("")
+
+
+def _add_fk_enable_section(
+    script_lines: List[str], fk_constraint_manager: ForeignKeyConstraintManager
+) -> None:
+    """Add foreign key re-enable section to script"""
+    if fk_constraint_manager.constraint_count > 0:
+        script_lines.append("-- =================================================================")
+        script_lines.append("-- RE-ENABLE AND VALIDATE FOREIGN KEY CONSTRAINTS")
+        script_lines.append("-- =================================================================")
+        enable_statements = fk_constraint_manager.generate_enable_all_sql()
+        for stmt in enable_statements:
+            script_lines.append(stmt + ";")
+        script_lines.append("")
+
+
 def generate_cleanup_script(
     operations: Dict[str, CleanupOperation],
     deletion_order: List[DbTable],
     config: CleanupConfig,
+    fk_constraint_manager: ForeignKeyConstraintManager,
 ) -> str:
     """Generate a SQL script for cleanup operations"""
     script_lines = []
@@ -535,7 +616,19 @@ def generate_cleanup_script(
     else:
         script_lines.append("-- Batch Processing: Disabled")
 
+    # Add FK constraint information to header
+    if fk_constraint_manager.constraint_count > 0:
+        script_lines.append("-- Foreign Key Management: Enabled")
+        script_lines.append(f"-- Constraints to disable: {fk_constraint_manager.constraint_count}")
+        affected_tables = ", ".join(sorted(fk_constraint_manager.affected_tables))
+        script_lines.append(f"-- Affected tables: {affected_tables}")
+    else:
+        script_lines.append("-- Foreign Key Management: None")
+
     script_lines.append("\nBEGIN TRANSACTION;\n")
+
+    # Disable foreign key constraints if any are configured
+    _add_fk_disable_section(script_lines, fk_constraint_manager)
 
     total_records = 0
     batched_tables = 0
@@ -577,11 +670,18 @@ def generate_cleanup_script(
 
             script_lines.append("")
 
+    # Re-enable foreign key constraints if any were disabled
+    _add_fk_enable_section(script_lines, fk_constraint_manager)
+
     script_lines.append(
         f"-- Script Summary: {total_records} records across {len(operations)} tables"
     )
     if batched_tables > 0:
         script_lines.append(f"-- {batched_tables} tables processed with batching")
+
+    if fk_constraint_manager.constraint_count > 0:
+        constraint_count = fk_constraint_manager.constraint_count
+        script_lines.append(f"-- {constraint_count} foreign key constraints managed")
 
     script_lines.append("\n-- COMMIT TRANSACTION;")
     script_lines.append("-- ROLLBACK TRANSACTION;")
