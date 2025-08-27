@@ -184,6 +184,18 @@ wheels = [
 ]
 
 [[package]]
+name = "pydbml"
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyparsing" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b6/ef/c006de411f6fab6b2f728eccfba082c2ab581e2d5cbaddf16ab90ad7157e/pydbml-1.2.0.tar.gz", hash = "sha256:c4fdb602f62b42e2b28674ea45e72f3d0e88bc6d186ea3a683685c41662ece14", size = 35895, upload-time = "2025-03-12T11:53:48.351Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f3/e7/3f926cc57715d865b640015ad99c8cc0711ce9a94029df4be0746fa27ba6/pydbml-1.2.0-py3-none-any.whl", hash = "sha256:dc663786647c97bbb6ef61f7a5becd5e7bb304770bb3e2e01d3f43748d33064f", size = 46150, upload-time = "2025-03-12T11:53:46.902Z" },
+]
+
+[[package]]
 name = "pygments"
 version = "2.19.1"
 source = { registry = "https://pypi.org/simple" }
@@ -204,6 +216,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/a4/35/1c7efd4665e7983169d20175014f68578e0edfcbc4602b0bafcefa522c4a/pyodbc-5.2.0-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:eaf42c4bd323b8fd01f1cd900cca2d09232155f9b8f0b9bcd0be66763588ce64", size = 353025, upload-time = "2024-10-16T01:39:55.124Z" },
     { url = "https://files.pythonhosted.org/packages/6d/c9/736d07fa33572abdc50d858fd9e527d2c8281f3acbb90dff4999a3662edd/pyodbc-5.2.0-cp313-cp313-win32.whl", hash = "sha256:207f16b7e9bf09c591616429ebf2b47127e879aad21167ac15158910dc9bbcda", size = 63052, upload-time = "2024-10-16T01:39:56.565Z" },
     { url = "https://files.pythonhosted.org/packages/73/2a/3219c8b7fa3788fc9f27b5fc2244017223cf070e5ab370f71c519adf9120/pyodbc-5.2.0-cp313-cp313-win_amd64.whl", hash = "sha256:96d3127f28c0dacf18da7ae009cd48eac532d3dcc718a334b86a3c65f6a5ef5c", size = 69486, upload-time = "2024-10-16T01:39:57.57Z" },
+]
+
+[[package]]
+name = "pyparsing"
+version = "3.2.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/bb/22/f1129e69d94ffff626bdb5c835506b3a5b4f3d070f17ea295e12c2c6f60f/pyparsing-3.2.3.tar.gz", hash = "sha256:b9c13f1ab8b3b542f72e28f634bad4de758ab3ce4546e4301970ad6fa77c38be", size = 1088608, upload-time = "2025-03-25T05:01:28.114Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/05/e7/df2285f3d08fee213f2d041540fa4fc9ca6c2d44cf36d3a035bf2a8d2bcc/pyparsing-3.2.3-py3-none-any.whl", hash = "sha256:a749938e02d6fd0b59b356ca504a24982314bb090c383e3cf201c95ef7e2bfcf", size = 111120, upload-time = "2025-03-25T05:01:24.908Z" },
 ]
 
 [[package]]
@@ -291,6 +312,7 @@ dependencies = [
     { name = "pandas" },
     { name = "psycopg2-binary" },
     { name = "pyarrow" },
+    { name = "pydbml" },
     { name = "pyodbc" },
     { name = "python-dotenv" },
     { name = "rich" },
@@ -314,6 +336,7 @@ requires-dist = [
     { name = "pandas-stubs", marker = "extra == 'dev'" },
     { name = "psycopg2-binary" },
     { name = "pyarrow" },
+    { name = "pydbml" },
     { name = "pyodbc" },
     { name = "python-dotenv" },
     { name = "rich" },

@@ -29,6 +29,13 @@ A collection of utility tools for working with various dialects of SQL databases
   - Option to use query files for complex comparisons
   - Detailed reporting on differences between datasets
 
+- **Database Diagram Generator** (`db_diagram`): Generate ERD diagrams from database metadata
+  - Support for DBML (Database Markup Language), Mermaid, and PlantUML formats
+  - DBML is the default format - purpose-built for database schemas with clean, readable syntax
+  - Configurable column display modes (all columns, keys only, or table names only)
+  - Automatic relationship detection from foreign key constraints
+  - Rich console output with progress indicators and formatted results
+
 ## Installation
 
 ### Requirements
@@ -99,6 +106,7 @@ cp config-example.toml config.toml
 - **View Tester**: Configure the schema and logging level
 - **Schema Size**: Configure the server connections, databases to compare, and logging level
 - **Data Compare**: Configure named comparison pairs with left/right database connections, database types (MSSQL/PostgreSQL), and queries or query files to compare
+- **Database Diagram Generator**: Configure the connection, schema, column display mode, diagram format, and output settings
 
 ## Usage
 
@@ -164,6 +172,20 @@ data_compare
 1. Compare the results of both queries
 1. Generate a detailed report of matching and non-matching data
 1. Display performance comparison between execution time of each data source
+
+### Database Diagram Generator
+
+```bash
+db_diagram
+```
+
+This will:
+
+1. Connect to the configured database using the specified connection string
+1. Analyze the database schema and extract table/column metadata
+1. Detect relationships based on foreign key constraints
+1. Generate diagram code in the specified format (DBML, Mermaid, or PlantUML)
+1. Save the diagram to the configured output directory with appropriate file extension (.dbml, .mmd, or .puml)
 
 ## Development
 

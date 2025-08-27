@@ -14,6 +14,7 @@ dependencies = [
     "sqlalchemy",
     "pandas",
     "pyarrow",
+    "pydbml",
 ]
 
 [project.optional-dependencies]
@@ -27,6 +28,7 @@ sql_to_parquet = "sql_to_parquet.sql_to_parquet:main"
 schema_size = "schema_size.schema_size:main"
 data_compare = "data_compare.data_compare:main"
 data_cleanup = "data_cleanup.data_cleanup:main"
+db_diagram = "db_diagram.db_diagram:main"
 
 [build-system]
 requires = ["setuptools"]
@@ -68,7 +70,7 @@ namespace_packages = true
 exclude = ["temp/.*"]
 
 [[tool.mypy.overrides]]
-module = ["pyodbc"]
+module = ["pyodbc", "pydbml", "pydbml.*"]
 ignore_missing_imports = true
 
 [tool.pyright]

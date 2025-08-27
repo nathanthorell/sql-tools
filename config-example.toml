@@ -130,3 +130,13 @@ query_of_data_to_remove = """
 SELECT id FROM dbo.YourTableName
 WHERE DeleteFlag = 1
 """
+
+######################################################################################
+[db_diagram]
+connection_env_var = "DB_DIAGRAM_DB"
+schema = "dbo"
+column_mode = "all"  # "all", "keys_only", or "none"
+diagram_format = "dbml"  # "dbml", "mermaid", or "plantuml"
+output_file = "database_erd"
+output_directory = "./output/diagrams"
+database = ""  # Optional: override database from connection string

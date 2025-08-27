@@ -36,4 +36,5 @@ repos:
             pandas-stubs,
             sqlalchemy,
             types-psycopg2,
+            pydbml,
           ]
