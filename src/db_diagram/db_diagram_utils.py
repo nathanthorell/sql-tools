@@ -4,9 +4,9 @@ from pydbml import Database as DBMLDatabase
 from pydbml.classes import Column as DBMLColumn
 from pydbml.classes import Reference as DBMLReference
 from pydbml.classes import Table as DBMLTable
-from sqlalchemy import MetaData, inspect
+from sqlalchemy import MetaData, inspect, text
 from sqlalchemy.engine import Engine
-from sqlalchemy.schema import Table
+from sqlalchemy.schema import ForeignKeyConstraint, Table
 
 
 def get_clean_table_name(table_name: str) -> str:
@@ -119,19 +119,66 @@ def get_reflected_metadata(engine: Engine, schema: Optional[str] = None) -> Meta
     return metadata
 
 
+def _get_temporal_history_tables(engine: Engine, schema: Optional[str] = None) -> Set[str]:
+    """Query SQL Server sys tables to get list of temporal history tables"""
+    history_tables: Set[str] = set()
+
+    try:
+        # Query to find temporal history tables
+        sql = """
+        SELECT
+            SCHEMA_NAME(t.schema_id) as schema_name,
+            t.name as table_name
+        FROM sys.tables t
+        WHERE t.temporal_type = 1  -- HISTORY_TABLE
+        """
+
+        # Add schema filter if specified
+        if schema:
+            sql += " AND SCHEMA_NAME(t.schema_id) = :schema"
+
+        with engine.connect() as conn:
+            if schema:
+                result = conn.execute(text(sql), {"schema": schema})
+            else:
+                result = conn.execute(text(sql))
+
+            for row in result:
+                # Create fully qualified table name to match metadata keys
+                if row.schema_name:
+                    full_name = f"{row.schema_name}.{row.table_name}"
+                else:
+                    full_name = row.table_name
+                history_tables.add(full_name)
+
+    except Exception:
+        # If we can't query sys tables (non-SQL Server, permissions, etc.),
+        # just return empty set and include all tables
+        pass
+
+    return history_tables
+
+
 def get_filtered_tables(
-    metadata: MetaData, schema: Optional[str] = None
+    metadata: MetaData, engine: Engine, schema: Optional[str] = None
 ) -> Iterator[Tuple[str, Table, str]]:
     """
     Generator that yields (table_name, table, clean_table_name) for tables
-    matching the schema filter
+    matching the schema filter, excluding temporal history tables
     """
+    # Get list of temporal history tables to exclude
+    history_tables = _get_temporal_history_tables(engine, schema)
+
     for table_name, table in metadata.tables.items():
         # Get schema name if it exists
         table_schema = table.schema if table.schema else ""
 
         # Skip if we're filtering by schema and this table doesn't match
         if schema and table_schema != schema:
+            continue
+
+        # Skip temporal history tables
+        if table_name in history_tables:
             continue
 
         # Generate clean table name
@@ -186,7 +233,7 @@ def generate_mermaid_diagram(
     mermaid_lines = ["erDiagram"]
 
     # Process tables
-    for _table_name, table, clean_table_name in get_filtered_tables(metadata, schema):
+    for _table_name, table, clean_table_name in get_filtered_tables(metadata, engine, schema):
         # For "none" column mode, just add empty tables
         if column_mode == "none":
             mermaid_lines.append(f"    {clean_table_name} {{")
@@ -217,7 +264,7 @@ def generate_plantuml_diagram(
     puml_lines = ["@startuml", "hide circle", "skinparam linetype ortho"]
 
     # Process tables
-    for _table_name, table, clean_table_name in get_filtered_tables(metadata, schema):
+    for _table_name, table, clean_table_name in get_filtered_tables(metadata, engine, schema):
         # Format and add table definition
         puml_lines.extend(format_table_definition_plantuml(clean_table_name, table, column_mode))
 
@@ -263,11 +310,35 @@ def _add_dbml_columns_to_table(
         dbml_table.add_column(dbml_column)
 
 
+def _get_dbml_reference_columns(
+    fk: ForeignKeyConstraint, from_table: DBMLTable, to_table: DBMLTable
+) -> Tuple[List[DBMLColumn], List[DBMLColumn]]:
+    """Get the DBML column objects for a foreign key relationship"""
+    from_cols = []
+    for fk_col in fk.columns:
+        dbml_col = next((c for c in from_table.columns if c.name == fk_col.name), None)
+        if dbml_col:
+            from_cols.append(dbml_col)
+
+    to_cols = []
+    # Get the referenced column names from the foreign key
+    for fk_col in fk.columns:
+        # The referenced column is the column that this FK column points to
+        for fk_element in fk_col.foreign_keys:
+            referenced_col_name = fk_element.column.name
+            dbml_col = next((c for c in to_table.columns if c.name == referenced_col_name), None)
+            if dbml_col:
+                to_cols.append(dbml_col)
+            break  # Only process the first foreign key per column
+
+    return from_cols, to_cols
+
+
 def _add_dbml_relationships(
-    dbml_db: DBMLDatabase, metadata: MetaData, schema: Optional[str]
+    dbml_db: DBMLDatabase, metadata: MetaData, engine: Engine, schema: Optional[str]
 ) -> None:
     """Add foreign key relationships to the DBML database"""
-    for table_name, table, _clean_table_name in get_filtered_tables(metadata, schema):
+    for table_name, table, _clean_table_name in get_filtered_tables(metadata, engine, schema):
         foreign_keys = list(table.foreign_key_constraints)
         for fk in foreign_keys:
             try:
@@ -280,22 +351,8 @@ def _add_dbml_relationships(
                 to_table = next((t for t in dbml_db.tables if t.name == clean_to_table_name), None)
 
                 if from_table and to_table:
-                    # Get DBML column objects (not just names)
-                    from_cols = []
-                    for fk_col in fk.columns:
-                        dbml_col = next(
-                            (c for c in from_table.columns if c.name == fk_col.name), None
-                        )
-                        if dbml_col:
-                            from_cols.append(dbml_col)
-
-                    to_cols = []
-                    for fk_element in fk.elements:
-                        dbml_col = next(
-                            (c for c in to_table.columns if c.name == fk_element.name), None
-                        )
-                        if dbml_col:
-                            to_cols.append(dbml_col)
+                    # Get DBML column objects for the relationship
+                    from_cols, to_cols = _get_dbml_reference_columns(fk, from_table, to_table)
 
                     # Create reference if we found the columns
                     if from_cols and to_cols:
@@ -313,7 +370,7 @@ def _add_dbml_relationships(
 
 def generate_dbml_diagram(
     engine: Engine, schema: Optional[str] = None, column_mode: str = "all"
-) -> str:
+) -> Any:
     """Generate DBML diagram from database metadata"""
     # Get reflected metadata
     metadata = get_reflected_metadata(engine, schema)
@@ -322,7 +379,7 @@ def generate_dbml_diagram(
     dbml_db = DBMLDatabase()
 
     # Process tables
-    for _table_name, table, clean_table_name in get_filtered_tables(metadata, schema):
+    for _table_name, table, clean_table_name in get_filtered_tables(metadata, engine, schema):
         # Create DBML table
         dbml_table = DBMLTable(name=clean_table_name)
 
@@ -334,6 +391,6 @@ def generate_dbml_diagram(
         dbml_db.add_table(dbml_table)
 
     # Add relationships
-    _add_dbml_relationships(dbml_db, metadata, schema)
+    _add_dbml_relationships(dbml_db, metadata, engine, schema)
 
-    return str(dbml_db.dbml)
+    return dbml_db.dbml
