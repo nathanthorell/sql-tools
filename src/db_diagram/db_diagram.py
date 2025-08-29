@@ -1,4 +1,5 @@
 import time
+from typing import Any
 
 from dotenv import load_dotenv
 from rich.markup import escape
@@ -7,9 +8,13 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from db_diagram.db_diagram_types import DiagramConfig
 from db_diagram.db_diagram_utils import (
     generate_dbml_diagram,
+    generate_dbml_diagram_from_tables,
     generate_mermaid_diagram,
+    generate_mermaid_diagram_from_tables,
     generate_plantuml_diagram,
+    generate_plantuml_diagram_from_tables,
 )
+from utils import DbTable, Hierarchy, MetadataService
 from utils.config_utils import get_config
 from utils.rich_utils import console
 
@@ -35,9 +40,6 @@ def main() -> None:
 
         config.rich_display()
 
-        # Create SQLAlchemy engine
-        engine = config.connection.get_sqlalchemy_engine()
-
         # Start timer
         start_time = time.time()
 
@@ -49,13 +51,36 @@ def main() -> None:
         ) as progress:
             task = progress.add_task("Analyzing database schema...", total=1)
 
-            # Generate diagram based on format
-            if config.diagram_format == "plantuml":
-                diagram_code = generate_plantuml_diagram(engine, config.schema, config.column_mode)
-            elif config.diagram_format == "mermaid":
-                diagram_code = generate_mermaid_diagram(engine, config.schema, config.column_mode)
-            else:  # Default to DBML
-                diagram_code = generate_dbml_diagram(engine, config.schema, config.column_mode)
+            # Generate diagram based on scope
+            if config.scope == "hierarchy":
+                # Use new hierarchy-based approach with custom DbTable classes
+                service = MetadataService(config.connection)
+                tables = _get_hierarchical_tables(service, config)
+                progress.update(task, completed=0.5, description="Generating diagram...")
+
+                # Generate diagram based on format using DbTable objects
+                if config.diagram_format == "plantuml":
+                    diagram_code = generate_plantuml_diagram_from_tables(tables, config.column_mode)
+                elif config.diagram_format == "mermaid":
+                    diagram_code = generate_mermaid_diagram_from_tables(tables, config.column_mode)
+                else:  # Default to DBML
+                    diagram_code = generate_dbml_diagram_from_tables(tables, config.column_mode)
+            else:
+                # Use original SQLAlchemy approach for schema mode
+                engine = config.connection.get_sqlalchemy_engine()
+                progress.update(task, completed=0.5, description="Generating diagram...")
+
+                # Generate diagram based on format using SQLAlchemy
+                if config.diagram_format == "plantuml":
+                    diagram_code = generate_plantuml_diagram(
+                        engine, config.schema, config.column_mode
+                    )
+                elif config.diagram_format == "mermaid":
+                    diagram_code = generate_mermaid_diagram(
+                        engine, config.schema, config.column_mode
+                    )
+                else:  # Default to DBML
+                    diagram_code = generate_dbml_diagram(engine, config.schema, config.column_mode)
 
             progress.update(task, completed=1, description="Schema analysis complete")
 
@@ -101,6 +126,87 @@ def main() -> None:
 
     except Exception as e:
         console.print(f"[bold red]Fatal error:[/] {escape(str(e))}")
+
+
+def _get_hierarchical_tables(service: MetadataService, config: DiagramConfig) -> list[DbTable]:
+    """Get tables related to the base table according to hierarchy configuration"""
+    base_table = _find_base_table(service, config)
+    hierarchy = service.build_hierarchy(base_table)
+    related_tables = _collect_related_tables(hierarchy, config.hierarchy_direction)
+
+    if config.hierarchy_max_depth is not None:
+        related_tables = _apply_depth_filter(related_tables, hierarchy, config.hierarchy_max_depth)
+
+    # Populate metadata (including foreign keys) for all tables in the hierarchy
+    _populate_table_metadata(service, related_tables)
+
+    return list(related_tables)
+
+
+def _find_base_table(service: MetadataService, config: DiagramConfig) -> DbTable:
+    """Find and validate the base table"""
+    if not config.base_table:
+        raise ValueError("Base table name is required for hierarchy mode")
+
+    # Create a DbTable object and populate it with metadata
+    base_table = DbTable(schema_name=config.schema, table_name=config.base_table)
+
+    # Verify the table exists and populate its metadata
+    try:
+        service.get_table_columns(base_table)
+        service.get_primary_key(base_table)
+        service.get_foreign_keys(base_table)
+        return base_table
+    except Exception as e:
+        raise ValueError(
+            f"Base table '{config.base_table}' not found in schema '{config.schema}'"
+        ) from e
+
+
+def _collect_related_tables(hierarchy: Hierarchy, direction: str) -> set[DbTable]:
+    """Collect related tables based on hierarchy direction"""
+    related_tables: set[DbTable] = set([hierarchy.root_table])
+
+    if direction in ["down", "both"]:
+        _add_relationship_tables(related_tables, hierarchy.relationships)
+
+    if direction in ["up", "both"]:
+        _add_relationship_tables(related_tables, hierarchy.relationships)
+
+    return related_tables
+
+
+def _add_relationship_tables(related_tables: set[DbTable], relationships: list[Any]) -> None:
+    """Add tables from relationships to the related tables set"""
+    for rel in relationships:
+        related_tables.add(rel.parent_table)
+        related_tables.add(rel.referenced_table)
+
+
+def _apply_depth_filter(
+    related_tables: set[DbTable], hierarchy: Hierarchy, max_depth: int
+) -> set[DbTable]:
+    """Filter tables by maximum hierarchy depth"""
+    filtered_tables: set[DbTable] = set([hierarchy.root_table])
+    for table_key, level in hierarchy.table_levels.items():
+        if level <= max_depth:
+            for table in related_tables:
+                if f"{table.schema_name}.{table.table_name}" == table_key:
+                    filtered_tables.add(table)
+                    break
+    return filtered_tables
+
+
+def _populate_table_metadata(service: MetadataService, tables: set[DbTable]) -> None:
+    """Populate metadata (columns, primary keys, foreign keys) for all tables"""
+    for table in tables:
+        try:
+            service.get_table_columns(table)
+            service.get_primary_key(table)
+            service.get_foreign_keys(table)
+        except Exception:
+            # Skip tables that can't be populated (might not exist)
+            continue
 
 
 if __name__ == "__main__":

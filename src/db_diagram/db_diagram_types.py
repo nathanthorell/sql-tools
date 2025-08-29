@@ -1,11 +1,13 @@
 from pathlib import Path
-from typing import Any, Dict, Literal
+from typing import Any, Dict, Literal, Optional
 
 from utils import get_connection
 from utils.rich_utils import console
 
 DiagramFormat = Literal["dbml", "mermaid", "plantuml"]
 ColumnMode = Literal["all", "keys_only", "none"]
+DiagramScope = Literal["schema", "hierarchy"]
+HierarchyDirection = Literal["up", "down", "both"]
 
 
 class DiagramConfig:
@@ -20,6 +22,28 @@ class DiagramConfig:
 
         # Schema configuration
         self.schema: str = config.get("schema", "dbo")
+
+        # Diagram scope and hierarchical settings
+        scope_str = config.get("scope", "schema")
+        if scope_str not in ["schema", "hierarchy"]:
+            raise ValueError(f"Invalid scope '{scope_str}'. Must be 'schema' or 'hierarchy'")
+        self.scope: DiagramScope = scope_str
+
+        # Base table for hierarchy mode
+        self.base_table: Optional[str] = config.get("base_table")
+        if self.scope == "hierarchy" and not self.base_table:
+            raise ValueError("base_table is required when scope is 'hierarchy'")
+
+        # Hierarchy direction
+        direction_str = config.get("hierarchy_direction", "both")
+        if direction_str not in ["up", "down", "both"]:
+            raise ValueError(
+                f"Invalid hierarchy_direction '{direction_str}'. Must be 'up', 'down', or 'both'"
+            )
+        self.hierarchy_direction: HierarchyDirection = direction_str
+
+        # Hierarchy max depth (optional)
+        self.hierarchy_max_depth: Optional[int] = config.get("hierarchy_max_depth")
 
         # Column display mode
         column_mode_str = config.get("column_mode", "all")
@@ -75,6 +99,12 @@ class DiagramConfig:
         console.print(f"Connection: [green]{self.connection.server}[/]")
         console.print(f"Database: [bold]{self.connection.database}[/]")
         console.print(f"Schema: [bold]{self.schema}[/]")
+        console.print(f"Scope: [bold]{self.scope}[/]")
+        if self.scope == "hierarchy":
+            console.print(f"Base Table: [bold]{self.base_table}[/]")
+            console.print(f"Direction: [bold]{self.hierarchy_direction}[/]")
+            if self.hierarchy_max_depth:
+                console.print(f"Max Depth: [bold]{self.hierarchy_max_depth}[/]")
         console.print(f"Column Mode: [bold]{self.column_mode}[/]")
         console.print(f"Format: [bold]{self.diagram_format}[/]")
         console.print(f"Output: [bold]{self.output_file_path}[/]")

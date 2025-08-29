@@ -33,6 +33,7 @@ A collection of utility tools for working with various dialects of SQL databases
   - Support for DBML (Database Markup Language), Mermaid, and PlantUML formats
   - DBML is the default format - purpose-built for database schemas with clean, readable syntax
   - Configurable column display modes (all columns, keys only, or table names only)
+  - **Hierarchical diagrams**: Focus on relationships around a specific base table with directional traversal
   - Automatic relationship detection from foreign key constraints
   - Rich console output with progress indicators and formatted results
 
