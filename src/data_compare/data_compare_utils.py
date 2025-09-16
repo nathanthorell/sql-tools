@@ -246,32 +246,62 @@ def generate_sql_statement(
     if dataset.empty:
         return "-- No data to generate SELECT statement"
 
-    # Get unique values from the first column (typically the key column)
-    column_name = dataset.columns[0]
-    values = dataset.iloc[:, 0].unique()
+    # Get unique rows (combinations of all columns) for compound keys
+    unique_rows = dataset.drop_duplicates()
 
-    # Limit the number of values if max_values is specified
-    if max_values is not None and len(values) > max_values:
-        values = values[:max_values]
+    # Limit the number of rows if max_values is specified
+    if max_values is not None and len(unique_rows) > max_values:
+        unique_rows = unique_rows.head(max_values)
         console.print(
-            f"[yellow]Warning: Truncated to {max_values} values for SQL SELECT statement[/]"
+            f"[yellow]Warning: Truncated to {max_values} rows for SQL SELECT statement[/]"
         )
 
-    # Format values for SQL
-    formatted_values = [format_value_for_sql_in(val) for val in values]
+    # Handle single column case (simple key)
+    if len(dataset.columns) == 1:
+        column_name = dataset.columns[0]
+        values = unique_rows.iloc[:, 0].tolist()
+        formatted_values = [format_value_for_sql_in(val) for val in values]
 
-    # Build the WHERE clause
-    if len(formatted_values) == 1:
-        where_clause = f"WHERE {column_name} = {formatted_values[0]}"
-    else:
-        if len(formatted_values) <= 10:
-            # For small lists, put all on one line
-            in_clause = f"IN ({', '.join(formatted_values)})"
+        if len(formatted_values) == 1:
+            where_clause = f"WHERE {column_name} = {formatted_values[0]}"
         else:
-            # For larger lists, format with line breaks for readability
-            values_str = ",\n        ".join(formatted_values)
-            in_clause = f"IN (\n        {values_str}\n    )"
-        where_clause = f"WHERE {column_name} {in_clause}"
+            if len(formatted_values) <= 10:
+                in_clause = f"IN ({', '.join(formatted_values)})"
+            else:
+                values_str = ",\n        ".join(formatted_values)
+                in_clause = f"IN (\n        {values_str}\n    )"
+            where_clause = f"WHERE {column_name} {in_clause}"
+
+    # Handle multiple columns case (compound key)
+    else:
+        column_names = list(dataset.columns)
+
+        # Create condition clauses for each row using AND/OR logic (SQL Server compatible)
+        row_conditions = []
+        for _, row in unique_rows.iterrows():
+            # Create AND conditions for each column in the row
+            column_conditions = []
+            for i, col_name in enumerate(column_names):
+                formatted_value = format_value_for_sql_in(row.iloc[i])
+                column_conditions.append(f"{col_name} = {formatted_value}")
+
+            # Join column conditions with AND, wrap in parentheses
+            row_condition = f"({' AND '.join(column_conditions)})"
+            row_conditions.append(row_condition)
+
+        if len(row_conditions) == 1:
+            # Single row: (col1 = val1 AND col2 = val2)
+            where_clause = f"WHERE {row_conditions[0]}"
+        else:
+            # Multiple rows: (col1 = val1a AND col2 = val2a) OR (col1 = val1b AND col2 = val2b)
+            if len(row_conditions) <= 3:
+                # For small lists, put all on one line
+                or_clause = " OR ".join(row_conditions)
+            else:
+                # For larger lists, format with line breaks for readability
+                conditions_str = "\n   OR ".join(row_conditions)
+                or_clause = conditions_str
+            where_clause = f"WHERE {or_clause}"
 
     # Build the complete SELECT statement
     select_statement = f"SELECT *\nFROM [{table_name}]\n{where_clause};"
@@ -305,7 +335,7 @@ def generate_output_file(
     else:
         filename = f"{clean_name}_{output_type}"
 
-    file_path = Path()
+    # Generate file based on format
     if format.lower() == "csv":
         file_path = output_path / f"{filename}.csv"
         dataset.to_csv(file_path, index=False)
@@ -317,12 +347,13 @@ def generate_output_file(
         sql_statement = generate_sql_statement(
             dataset, table_name=table_name, max_values=max_sql_in_values
         )
-        unique_count = len(dataset.iloc[:, 0].unique()) if not dataset.empty else 0
+        unique_rows_count = len(dataset.drop_duplicates()) if not dataset.empty else 0
+        key_columns = ", ".join(dataset.columns) if not dataset.empty else "N/A"
         sql_content = f"""-- SQL SELECT Statement for "{name}"
 -- Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 -- Total records: {len(dataset)}
--- Unique values: {unique_count}
--- Key column: {dataset.columns[0] if not dataset.empty else "N/A"}
+-- Unique row combinations: {unique_rows_count}
+-- Key columns: {key_columns}
 -- Usage: Copy this query and modify the table name as needed
 
 {sql_statement}
