@@ -85,57 +85,49 @@ def handle_output_files(
     timestamp_file: bool,
     max_sql_in_values: int,
 ) -> None:
-    """Handle output file generation based on output_type configuration"""
-    match output_type:
-        case "left_only":
-            if not result.left_only.empty:
-                generate_output_file(
-                    name=name,
-                    output_type="left_only",
-                    dataset=result.left_only,
-                    output_dir=output_dir,
-                    table_name=output_table_name,
-                    format=output_format,
-                    timestamp_file=timestamp_file,
-                    max_sql_in_values=max_sql_in_values,
-                )
-        case "right_only":
-            if not result.right_only.empty:
-                generate_output_file(
-                    name=name,
-                    output_type="right_only",
-                    dataset=result.right_only,
-                    output_dir=output_dir,
-                    table_name=output_table_name,
-                    format=output_format,
-                    timestamp_file=timestamp_file,
-                    max_sql_in_values=max_sql_in_values,
-                )
-        case "both":
-            if not result.left_only.empty:
-                generate_output_file(
-                    name=name,
-                    output_type="left_only",
-                    dataset=result.left_only,
-                    output_dir=output_dir,
-                    table_name=output_table_name,
-                    format=output_format,
-                    timestamp_file=timestamp_file,
-                    max_sql_in_values=max_sql_in_values,
-                )
-            if not result.right_only.empty:
-                generate_output_file(
-                    name=name,
-                    output_type="right_only",
-                    dataset=result.right_only,
-                    output_dir=output_dir,
-                    table_name=output_table_name,
-                    format=output_format,
-                    timestamp_file=timestamp_file,
-                    max_sql_in_values=max_sql_in_values,
-                )
-        case _:
-            console.print(f"[yellow]Unknown output type: {output_type}[/]")
+    """Handle output file generation based on output_type configuration
+
+    Output types:
+    - left_only: rows only in left query
+    - right_only: rows only in right query
+    - common: rows present in both queries
+    - differences: both left_only AND right_only (what's different)
+    - all: left_only, right_only, AND common (complete breakdown)
+    """
+    # Map output types to the datasets they should generate
+    output_mappings = {
+        "left_only": [("left_only", result.left_only)],
+        "right_only": [("right_only", result.right_only)],
+        "common": [("common", result.common_rows)],
+        "differences": [
+            ("left_only", result.left_only),
+            ("right_only", result.right_only),
+        ],
+        "all": [
+            ("left_only", result.left_only),
+            ("right_only", result.right_only),
+            ("common", result.common_rows),
+        ],
+    }
+
+    if output_type not in output_mappings:
+        console.print(f"[yellow]Unknown output type: {output_type}[/]")
+        console.print("[dim]Valid options: left_only, right_only, common, differences, all[/]")
+        return
+
+    # Generate output files for the specified output type
+    for file_type, dataset in output_mappings[output_type]:
+        if not dataset.empty:
+            generate_output_file(
+                name=name,
+                output_type=file_type,
+                dataset=dataset,
+                output_dir=output_dir,
+                table_name=output_table_name,
+                format=output_format,
+                timestamp_file=timestamp_file,
+                max_sql_in_values=max_sql_in_values,
+            )
 
 
 def run_comparisons(config: ComparisonConfig) -> bool:
@@ -160,7 +152,7 @@ def run_comparisons(config: ComparisonConfig) -> bool:
         console.print()
         console.rule(f"[bold {color}]{name}[/]")
 
-        output_table_name = comparison.table_name
+        output_table_name = comparison.full_table_name
 
         left_conn = comparison.left_connection
         right_conn = comparison.right_connection
@@ -239,6 +231,14 @@ def format_value_for_sql_in(value: Any) -> str:
         return f"'{escaped_value}'"
 
 
+def _format_table_name_for_sql(table_name: str) -> str:
+    """Format table name with proper schema.table bracketing for SQL"""
+    if "." in table_name:
+        schema, table = table_name.split(".", 1)
+        return f"[{schema}].[{table}]"
+    return f"[{table_name}]"
+
+
 def generate_sql_statement(
     dataset: pd.DataFrame, table_name: str, max_values: Optional[int] = None
 ) -> str:
@@ -303,8 +303,9 @@ def generate_sql_statement(
                 or_clause = conditions_str
             where_clause = f"WHERE {or_clause}"
 
-    # Build the complete SELECT statement
-    select_statement = f"SELECT *\nFROM [{table_name}]\n{where_clause};"
+    # Build the complete SELECT statement with properly formatted table name
+    from_clause = _format_table_name_for_sql(table_name)
+    select_statement = f"SELECT *\nFROM {from_clause}\n{where_clause};"
 
     return select_statement
 

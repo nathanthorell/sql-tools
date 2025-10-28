@@ -87,7 +87,7 @@ databases.PROD = ["ProdDB1", "ProdDB2", "ProdDB3"]
 
 ######################################################################################
 [data_compare]
-output_type = "right_only"  # "left_only", "right_only", or "both"
+output_type = "right_only"  # "left_only", "right_only", "common", "differences", or "all"
 output_file_path = "./output/"
 output_format = "csv"  # "csv" or "json" or "sql"
 timestamp_file = false  # Whether to include timestamp in filename
@@ -99,7 +99,8 @@ left_connection = "DATA_COMPARE_LEFT_DB"
 right_connection = "DATA_COMPARE_RIGHT_DB"
 left_db_type = "mssql"
 right_db_type = "pg"
-output_table_name = "my_table"  # Optional but useful when outputting to sql format
+schema_name = "dbo"      # Optional schema name for SQL output format
+table_name = "my_table"  # Optional table name for SQL output format
 left_query = """
 SELECT 1 AS column_one, 2 AS column_two
 """

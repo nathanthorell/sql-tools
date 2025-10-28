@@ -27,6 +27,7 @@ A collection of utility tools for working with various dialects of SQL databases
   - Support for MSSQL and PostgreSQL databases
   - Compare data using custom SQL queries
   - Option to use query files for complex comparisons
+  - Flexible output options: left_only, right_only, common, differences, or all
   - Detailed reporting on differences between datasets
 
 - **Database Diagram Generator** (`db_diagram`): Generate ERD diagrams from database metadata
@@ -173,6 +174,14 @@ data_compare
 1. Compare the results of both queries
 1. Generate a detailed report of matching and non-matching data
 1. Display performance comparison between execution time of each data source
+
+#### Output Types
+
+- `left_only`: Export rows that exist only in the left query result
+- `right_only`: Export rows that exist only in the right query result
+- `common`: Export rows that exist in both query results
+- `differences`: Export both left_only and right_only (what's different)
+- `all`: Export left_only, right_only, and common (complete breakdown)
 
 ### Database Diagram Generator
 

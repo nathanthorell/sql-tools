@@ -366,8 +366,16 @@ class ComparisonItem:
     left_query: str
     right_query: str
     table_name: str
+    schema_name: str = ""
     left_db_type: str = "mssql"
     right_db_type: str = "mssql"
+
+    @property
+    def full_table_name(self) -> str:
+        """Return the full table name with schema if provided"""
+        if self.schema_name:
+            return f"{self.schema_name}.{self.table_name}"
+        return self.table_name
 
 
 class ComparisonConfig:
@@ -427,6 +435,7 @@ class ComparisonConfig:
                 left_db_type=item.get("left_db_type", "mssql"),
                 right_db_type=item.get("right_db_type", "mssql"),
                 table_name=item.get("table_name", "table_name_not_provided"),
+                schema_name=item.get("schema_name", ""),
             )
             comparisons.append(comparison)
 
