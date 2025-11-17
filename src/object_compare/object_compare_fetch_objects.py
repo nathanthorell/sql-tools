@@ -18,7 +18,7 @@ def fetch_definitions(
         schema_name: Schema to query
         object_type: Type of object to fetch
             (stored_proc, view, function, table, trigger, sequence)
-        db_type: Database type (mssql, pg)
+        db_type: Database type (mssql, postgres)
 
     Returns:
         Dictionary of object names to their definitions
@@ -59,7 +59,7 @@ def get_query_for_object_type(schema_name: str, object_type: str, db_type: str =
     Args:
         schema_name: Schema name to use in the query
         object_type: Type of database object
-        db_type: Database type (mssql, pg)
+        db_type: Database type (mssql, postgres)
 
     Returns:
         SQL query string or empty string if object type is unknown
@@ -77,7 +77,7 @@ def get_query_for_object_type(schema_name: str, object_type: str, db_type: str =
             "external_table": mssql.get_mssql_external_table_query,
             "foreign_key": mssql.get_mssql_foreign_key_query,
         }
-    elif db_type == "pg":
+    elif db_type == "postgres":
         query_functions = {
             "stored_proc": pg.get_pg_stored_proc_query,
             "view": pg.get_pg_view_query,

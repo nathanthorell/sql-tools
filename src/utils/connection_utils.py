@@ -52,6 +52,13 @@ class Connection:
                 server_name = server_port.split(",")[0].strip()
                 return server_name
         elif self.db_type == "postgres":
+            # Try URI format first: postgresql://user:pass@HOST:port/dbname
+            uri_match = re.search(
+                r"postgresql://[^@]*@([^:/]+)", self.connection_string, re.IGNORECASE
+            )
+            if uri_match:
+                return uri_match.group(1).strip()
+            # Fall back to key-value format: host=HOST
             host_match = re.search(r"host\s*=\s*([^\s]+)", self.connection_string, re.IGNORECASE)
             if host_match:
                 return host_match.group(1).strip()
@@ -64,6 +71,13 @@ class Connection:
             db_match = re.search(r"Database\s*=\s*([^;]+)", self.connection_string, re.IGNORECASE)
             return db_match.group(1) if db_match else ""
         elif self.db_type == "postgres":
+            # Try URI format first: postgresql://user:pass@host:port/DBNAME
+            uri_match = re.search(
+                r"postgresql://[^/]*/([^?]+)", self.connection_string, re.IGNORECASE
+            )
+            if uri_match:
+                return uri_match.group(1).strip()
+            # Fall back to key-value format: dbname=DBNAME
             db_match = re.search(r"dbname\s*=\s*([^\s]+)", self.connection_string, re.IGNORECASE)
             return db_match.group(1) if db_match else ""
         return ""
@@ -79,7 +93,7 @@ class Connection:
         """Create and return a database connection."""
         if self.db_type == "mssql":
             return pyodbc.connect(self.full_connection_string)
-        elif self.db_type == "postgres" or self.db_type == "pg":
+        elif self.db_type == "postgres":
             return psycopg2.connect(self.connection_string)
         else:
             raise ValueError(f"Unsupported database type: {self.db_type}")
@@ -99,7 +113,7 @@ class Connection:
             odbc_connect = self.full_connection_string
             engine = create_engine(f"mssql+pyodbc:///?odbc_connect={odbc_connect}")
             return engine
-        elif self.db_type == "postgres" or self.db_type == "pg":
+        elif self.db_type == "postgres":
             if self.connection_string.startswith("postgresql://"):
                 engine = create_engine(self.connection_string)
             else:
@@ -142,9 +156,18 @@ def modify_connection_for_database(connection: Connection, database_name: str) -
             connection.connection_string,
             flags=re.IGNORECASE,
         )
-    elif connection.db_type in ["postgres", "pg"]:
-        # For postgres, update the dbname parameter
-        if "dbname=" in connection.connection_string:
+    elif connection.db_type == "postgres":
+        # For postgres, handle both URI and key-value formats
+        if connection.connection_string.startswith("postgresql://"):
+            # URI format: replace the database name in the path
+            connection_string = re.sub(
+                r"(postgresql://[^/]*)/[^?\s]*",
+                rf"\1/{database_name}",
+                connection.connection_string,
+                flags=re.IGNORECASE,
+            )
+        elif "dbname=" in connection.connection_string:
+            # Key-value format: replace existing dbname
             connection_string = re.sub(
                 r"dbname\s*=\s*[^\s;]+",
                 f"dbname={database_name}",
@@ -152,7 +175,7 @@ def modify_connection_for_database(connection: Connection, database_name: str) -
                 flags=re.IGNORECASE,
             )
         else:
-            # If dbname is not in the connection string, add it
+            # Key-value format without dbname: add it
             connection_string = f"{connection.connection_string} dbname={database_name}"
     else:
         raise ValueError(f"Unsupported database type: {connection.db_type}")

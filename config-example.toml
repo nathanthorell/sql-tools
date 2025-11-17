@@ -6,6 +6,7 @@ logging_level = "summary" # "verbose", "errors_only", or "summary"
 [object_compare]
 schema = "report"
 database = "ExampleDb" # Optional, switches from whatever db is in conn to this db
+db_type = "mssql" # Optional, defaults to mssql, accepts mssql or postgres
 object_types = [
     "stored_proc",
     "view",
@@ -117,6 +118,7 @@ table = "YourTableName"
 cleanup_mode = "summary" # "summary" or "execute"
 batch_size = 1000 # Number of records to process in each batch
 batch_threshold = 3000 # Minimum records before batching is applied
+name = "MyDb Deleted Data Cleanup" # optional name for cleaner file output
 
 # Tables to temporarily disable foreign key constraints for during deletion
 # Format: ["schema.table", "schema.table2"]

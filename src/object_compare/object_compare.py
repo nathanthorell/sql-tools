@@ -100,38 +100,42 @@ def main() -> None:
     )  # use these as defaults if nothing is in the config
 
     connections: Dict[str, Connection] = {}
-    connection_info = []
 
     for env_name, env_var in environments.items():
         try:
-            connections[env_name] = get_connection(env_var)
+            connections[env_name] = get_connection(env_var, db_type=db_type)
             if database is not None:
                 connections[env_name] = modify_connection_for_database(
                     connections[env_name], database_name=database
                 )
-            conn_str = escape(str(connections[env_name]))
-            connection_info.append(f"[green]{env_name}[/]: {conn_str}")
         except ValueError as e:
-            connection_info.append(f"[yellow]{env_name}[/]: Error - {e}")
+            console.print(f"[yellow]Warning:[/] Failed to connect to {env_name}: {e}")
 
     header_content = "[bold cyan]SQL Object Comparison Tool[/]\n"
+    header_content += f"Database Type: [cyan]{db_type}[/] | Schema: [cyan]{schema}[/]\n"
+
+    # Display connection info for each environment with column alignment
+    max_env_len = max(len(env) for env in environments.keys())
+    max_server_len = max(
+        (len(connections[env].server) if env in connections and connections[env].server else 3)
+        for env in environments.keys()
+    )
+
+    for env_name in environments.keys():
+        if env_name in connections:
+            conn = connections[env_name]
+            server = escape(conn.server) if conn.server else "N/A"
+            database = escape(conn.database) if conn.database else "N/A"
+            padded_env = env_name.upper().ljust(max_env_len)
+            padded_server = server.ljust(max_server_len)
+            header_content += (
+                f"\n[green]{padded_env}[/]: Server: {padded_server} | Database: {database}"
+            )
+        else:
+            padded_env = env_name.upper().ljust(max_env_len)
+            header_content += f"\n[yellow]{padded_env}[/]: Not connected"
 
     term_width = console.width or 100
-    if term_width < 100:
-        formatted_connections = []
-        for env_name in environments.items():
-            if env_name in connections:
-                conn = connections[env_name]
-                formatted_connections.append(f"[green]{env_name}[/]:")
-                formatted_connections.append(f"  Server: [{conn.server}]")
-                formatted_connections.append(f"  Database: [{conn.database}]")
-            else:
-                formatted_connections.append(f"[yellow]{env_name}[/]: Not connected")
-        header_content += "\n" + "\n".join(formatted_connections)
-    else:
-        # For wider terminals, use the original format
-        header_content += "\n" + "\n".join(connection_info)
-
     content_lines = header_content.split("\n")
     max_line_length = max(len(Text.from_markup(line).plain) for line in content_lines)
     ideal_width = max_line_length + 8
